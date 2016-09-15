@@ -12,7 +12,7 @@ import java.lang.annotation.Target;
  * @author richey
  * @since 1.0.SNAPSHOT
  */
-@Target(ElementType.TYPE)
+@Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
 public @interface Action {

@@ -2,7 +2,6 @@ package org.joyful4j.framework.helper;
 
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.ArrayUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.joyful4j.framework.annotation.Action;
 import org.joyful4j.framework.bean.Handler;
 import org.joyful4j.framework.bean.Request;
@@ -32,7 +31,7 @@ public class ControllerHelper {
                             //从Action注解中获取URL映射规则
                             Action action = method.getAnnotation(Action.class);
                             String mapping = action.value();
-                            if(mapping.matches("\\W+:/\\W*")){
+                            if(mapping.matches("\\w+:/\\w*")){
                                 String[] array = mapping.split(":");
                                 if(ArrayUtils.isNotEmpty(array)&&array.length == 2){
                                     String requestMethod = array[0];

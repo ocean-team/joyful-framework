@@ -1,6 +1,8 @@
 package org.joyful4j.framework.bean;
 
+import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * 返回视图对象
@@ -19,7 +21,12 @@ public class View {
      */
     private Map<String,Object> model;
 
-    public View addModel(String key,Object value){
+    public View(String path) {
+        this.path = path;
+        this.model = new HashMap<String, Object >();
+    }
+
+    public View addModel(String key, Object value){
         model.put(key,value);
         return this;
     }
