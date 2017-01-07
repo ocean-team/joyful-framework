@@ -6,11 +6,14 @@
 
     <groupId>org.joyful4j</groupId>
     <artifactId>joyful-framework</artifactId>
+    <version>1.0-SNAPSHOT</version>
     <packaging>pom</packaging>
-    <version>joyful-framework</version>
+
     <modules>
         <module>joyful-utils</module>
         <module>core</module>
+        <module>mail</module>
+        <module>persistence</module>
     </modules>
 
     <properties>
@@ -86,11 +89,6 @@
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-dbcp2</artifactId>
             <version>2.1.1</version>
-        </dependency>
-        <dependency>
-            <groupId>org.joyful4j</groupId>
-            <artifactId>joyful-utils</artifactId>
-            <version>joyful-framework</version>
         </dependency>
         <!--<dependency>-->
         <!--<groupId>com.zaxxer</groupId>-->
