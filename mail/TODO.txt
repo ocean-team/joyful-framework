@@ -1,0 +1,1 @@
+整合properties文件的测试DEMO

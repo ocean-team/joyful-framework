@@ -6,10 +6,10 @@ import java.util.Properties;
  * Created by richey on 17-1-5.
  */
 public abstract  class AbstractMessage implements Message{
-    private String subject;
-    private String text;
-    private Properties properties = new Properties();
-    private String contentType = TEXT;
+    protected String subject; //主题
+    protected String text;  //内容
+    protected Properties properties = new Properties();//消息属性
+    protected String contentType = TEXT;//内容类型
 
     @Override
     public String getSubject() {
