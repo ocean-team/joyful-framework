@@ -10,11 +10,7 @@
     <packaging>pom</packaging>
 
     <modules>
-        <module>joyful-utils</module>
         <module>core</module>
-        <module>mail</module>
-        <module>persistence</module>
-        <module>commons-lang</module>
     </modules>
 
     <properties>
