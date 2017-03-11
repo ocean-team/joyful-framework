@@ -1,7 +1,7 @@
 package org.joyfulframework.helper;
 
 import org.joyfulframework.ConfigConstant;
-import org.joyfulframework.utils.common.PropsUtil;
+import org.joyful4j.modules.utils.common.PropsUtil;
 import java.util.Properties;
 
 /**

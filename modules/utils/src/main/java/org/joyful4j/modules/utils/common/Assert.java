@@ -1,4 +1,4 @@
-package org.joyful4j.commons.lang;
+package org.joyful4j.modules.utils.common;
 
 import java.util.Iterator;
 

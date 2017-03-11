@@ -1,6 +1,7 @@
 package org.joyfulframework.helper;
 
-import org.joyfulframework.utils.reflect.ReflectionUtil;
+
+import org.joyful4j.modules.utils.reflect.ReflectionUtil;
 
 import java.util.HashMap;
 import java.util.Map;

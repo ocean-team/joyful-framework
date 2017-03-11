@@ -2,26 +2,37 @@
   xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.joyful4j</groupId>
-  <artifactId>joyful4j-utils</artifactId>
+  <artifactId>joyful-utils</artifactId>
   <version>1.0-SNAPSHOT</version>
   <packaging>jar</packaging>
-  <name>Joyful4j :: Modules :: Utils</name>
+  <name>Joyful :: Modules :: Utils</name>
 
   <properties>
     <commons-lang3.version>3.5</commons-lang3.version>
-
-
-
+    <org.slf4j.version>1.7.7</org.slf4j.version>
+    <log4j.version>1.2.12</log4j.version>
   </properties>
 
   <dependencies>
-
     <dependency>
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-lang3</artifactId>
       <version>${commons-lang3.version}</version>
     </dependency>
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-log4j12</artifactId>
+      <version>${org.slf4j.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>log4j</groupId>
+      <artifactId>log4j</artifactId>
+      <version>${log4j.version}</version>
+    </dependency>
+
   </dependencies>
+
   <build>
     <plugins>
       <plugin>
@@ -39,13 +50,4 @@
       </plugin>
     </plugins>
   </build>
-
-  <distributionManagement>
-    <snapshotRepository>
-      <id>ss-sonatype-snapshots</id>
-      <url>https://oss.sonatype.org/content/repositories/snapshots</url>
-    </snapshotRepository>
-  </distributionManagement>
-
-
 </project>

@@ -4,7 +4,7 @@ import org.joyfulframework.helper.BeanHelper;
 import org.joyfulframework.helper.ClassHelper;
 import org.joyfulframework.helper.ConfigHelper;
 import org.joyfulframework.helper.IocHelper;
-import org.joyfulframework.utils.common.ClassUtil;
+import org.joyful4j.modules.utils.common.ClassUtil;
 
 /**
  * 集中加载相应的Helper类

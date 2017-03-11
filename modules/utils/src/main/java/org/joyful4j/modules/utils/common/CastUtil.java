@@ -1,4 +1,4 @@
-package org.joyfulframework.utils.common;
+package org.joyful4j.modules.utils.common;
 
 import org.apache.commons.lang3.StringUtils;
 

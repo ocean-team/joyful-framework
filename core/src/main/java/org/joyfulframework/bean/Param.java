@@ -1,6 +1,6 @@
 package org.joyfulframework.bean;
 
-import org.joyfulframework.utils.common.CastUtil;
+import org.joyful4j.modules.utils.common.CastUtil;
 
 import java.util.Map;
 

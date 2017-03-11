@@ -2,8 +2,8 @@ package org.joyfulframework.helper;
 
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.ArrayUtils;
+import org.joyful4j.modules.utils.reflect.ReflectionUtil;
 import org.joyfulframework.annotation.Inject;
-import org.joyfulframework.utils.reflect.ReflectionUtil;
 
 import java.lang.reflect.Field;
 import java.util.Map;

@@ -2,7 +2,7 @@ package org.joyfulframework.helper;
 
 import org.joyfulframework.annotation.Controller;
 import org.joyfulframework.annotation.Service;
-import org.joyfulframework.utils.common.ClassUtil;
+import org.joyful4j.modules.utils.common.ClassUtil;
 
 import java.util.HashSet;
 import java.util.Set;
