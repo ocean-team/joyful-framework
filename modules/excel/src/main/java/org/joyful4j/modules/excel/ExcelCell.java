@@ -18,11 +18,18 @@ import java.lang.annotation.Target;
 @Target(ElementType.FIELD)
 public @interface ExcelCell {
     /**
-     * 顺序 default 100
+     * 导出顺序
      * 
      * @return index
      */
     int index();
+
+    /**
+     * 表头(多语言)
+     * @return header
+     */
+    String[] header();
+
 
     /**
      * 当值为null时要显示的值 default StringUtils.EMPTY

@@ -4,26 +4,26 @@ import java.util.Date;
 
 public class Payroll4Excel {
 
-    @ExcelCell(index = 0)
+    @ExcelCell(index = 0, header = {"姓名", "Name"})
     @ExcelCell.Valid(allowNull = false)
     private String name;
 
-    @ExcelCell(index = 1)
+    @ExcelCell(index = 1, header = {"年", "Year"})
     @ExcelCell.Valid(allowNull = false)
     private Integer year;
 
-    @ExcelCell(index = 2)
-    @ExcelCell.Valid(allowNull = false,ge = 0L,le = 12L)
+    @ExcelCell(index = 2, header = {"月", "Month"})
+    @ExcelCell.Valid(allowNull = false, ge = 0L, le = 12L)
     private Integer month;
 
-    @ExcelCell(index = 3)
+    @ExcelCell(index = 3, header = {"工资", "Salary"})
     @ExcelCell.Valid(ge = 0L)
-    private Double money;
+    private Double salary;
 
-    @ExcelCell(index = 4)
+    @ExcelCell(index = 4, header = {"税额", "Tax"})
     private Double tax;
 
-    @ExcelCell(index = 5)
+    @ExcelCell(index = 5, header = {"发放时间", "Pay Time"})
     private Date payTime;
 
 
@@ -34,7 +34,7 @@ public class Payroll4Excel {
         this.name = name;
         this.year = year;
         this.month = month;
-        this.money = money;
+        this.salary = money;
         this.tax = tax;
         this.payTime = payTime;
     }
@@ -64,11 +64,11 @@ public class Payroll4Excel {
     }
 
     public Double getMoney() {
-        return money;
+        return salary;
     }
 
     public void setMoney(Double money) {
-        this.money = money;
+        this.salary = money;
     }
 
     public Double getTax() {

@@ -30,6 +30,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * The <code>ExcelUtil</code> 与 {@link ExcelCell}搭配使用
@@ -64,13 +65,13 @@ public class ExcelUtil {
      * 获取cell类型的文字描述
      *
      * @param cellType <pre>
-     *                                                   CellType.BLANK
-     *                                                   CellType.BOOLEAN
-     *                                                   CellType.ERROR
-     *                                                   CellType.FORMULA
-     *                                                   CellType.NUMERIC
-     *                                                   CellType.STRING
-     *                                                 </pre>
+     *                 CellType.BLANK
+     *                 CellType.BOOLEAN
+     *                 CellType.ERROR
+     *                 CellType.FORMULA
+     *                 CellType.NUMERIC
+     *                 CellType.STRING
+     *                 </pre>
      * @return
      */
     private static String getCellTypeByInt(CellType cellType) {
@@ -431,15 +432,12 @@ public class ExcelUtil {
             while (rowIterator.hasNext()) {
                 Row row = rowIterator.next();
                 if (row.getRowNum() == 0) {
-                    if (clazz == Map.class) {
-                        // 解析map用的key,就是excel标题行
-                        Iterator<Cell> cellIterator = row.cellIterator();
-                        Integer index = 0;
-                        while (cellIterator.hasNext()) {
-                            String value = cellIterator.next().getStringCellValue();
-                            titleMap.put(value, index);
-                            index++;
-                        }
+                    // 解析map用的key,就是excel标题行
+                    Iterator<Cell> cellIterator = row.cellIterator();
+                    while (cellIterator.hasNext()) {
+                        Cell cell = cellIterator.next();
+                        String value = cell.getStringCellValue();
+                        titleMap.put(value, cell.getColumnIndex());
                     }
                     continue;
                 }
@@ -476,12 +474,23 @@ public class ExcelUtil {
                     list.add((T) map);
 
                 } else {
+                    //fixme 表头导入要支持乱序
                     T t = clazz.newInstance();
                     int arrayIndex = 0;// 标识当前第几个数组了
-                    int cellIndex = 0;// 标识当前读到这一行的第几个cell了
-                    List<FieldForSortting> fields = sortFieldByAnno(clazz);
-                    for (FieldForSortting ffs : fields) {
+                    //fixme 导入时不能通过index顺序
+                    List<FieldForSortting> sorttingsFields = sortFieldByAnno(clazz);
+
+                    int localeHeaderIndex = getLocaleIndex(titleMap, sorttingsFields);
+
+                    for (FieldForSortting ffs : sorttingsFields) {
                         Field field = ffs.getField();
+                        Integer cellIndex = getHeaderIndex(titleMap, field);
+
+                        if (requiredColumnNotExist(logs, log, field, cellIndex)) {
+                            continue;
+                        }
+                        String localeHeaderName = getLocaleHeaderName(localeHeaderIndex, field);
+
                         field.setAccessible(true);
                         if (field.getType().isArray()) {
                             Integer count = arrayCount[arrayIndex];
@@ -494,21 +503,18 @@ public class ExcelUtil {
                             }
                             for (int i = 0; i < count; i++) {
                                 Cell cell = row.getCell(cellIndex);
-                                String errMsg = validateCell(cell, field, cellIndex);
+                                String errMsg = validateCell(cell, field, cellIndex, localeHeaderName);
                                 if (StringUtils.isBlank(errMsg)) {
                                     value[i] = getCellValue(cell);
                                 } else {
-                                    log.append(errMsg);
-                                    log.append(";");
-                                    logs.setHasError(true);
+                                    addExcelLog(logs, log, errMsg);
                                 }
-                                cellIndex++;
                             }
                             field.set(t, value);
                             arrayIndex++;
                         } else {
                             Cell cell = row.getCell(cellIndex);
-                            String errMsg = validateCell(cell, field, cellIndex);
+                            String errMsg = validateCell(cell, field, cellIndex, localeHeaderName);
                             if (StringUtils.isBlank(errMsg)) {
                                 Object value = null;
                                 // 处理特殊情况,Excel中的String,转换成Bean的Date
@@ -516,12 +522,12 @@ public class ExcelUtil {
                                         && cell.getCellTypeEnum() == CellType.STRING) {
                                     Object strDate = getCellValue(cell);
                                     try {
+                                        //fixme 时间格式处理
                                         value = new SimpleDateFormat(pattern).parse(strDate.toString());
-                                    } catch (ParseException e) {
 
+                                    } catch (ParseException e) {
                                         errMsg =
-                                                MessageFormat.format("the cell [{0}] can not be converted to a date ",
-                                                        CellReference.convertNumToColString(cell.getColumnIndex()));
+                                                MessageFormat.format("the column [{0}] can not be converted to a date ", localeHeaderName);
                                     }
                                 } else {
                                     value = getCellValue(cell);
@@ -532,15 +538,12 @@ public class ExcelUtil {
                                         value = annoCell.defaultValue();
                                     }
                                 }
-                                value = convertToFieldValue(field.getType(),value);
+                                value = convertToFieldValue(field.getType(), value);
                                 field.set(t, value);
                             }
                             if (StringUtils.isNotBlank(errMsg)) {
-                                log.append(errMsg);
-                                log.append(";");
-                                logs.setHasError(true);
+                                addExcelLog(logs, log, errMsg);
                             }
-                            cellIndex++;
                         }
                     }
                     list.add(t);
@@ -558,9 +561,91 @@ public class ExcelUtil {
         return list;
     }
 
+    //获取当前索引表头
+    private static String getLocaleHeaderName(int localeHeaderIndex, Field field) {
+        String[] headers = field.getAnnotation(ExcelCell.class).header();
+        String localeHeaderName = headers[0];
+        if (headers.length > localeHeaderIndex) {
+            localeHeaderName = headers[localeHeaderIndex];
+        }
+        return localeHeaderName;
+    }
+
+    /**
+     * 根据表头非空字段，判断多语言表头索引，若没有默认0
+     *
+     * @param titleMap        表头{列名，列索引}
+     * @param sorttingsFields 所有字段
+     * @return
+     */
+    private static int getLocaleIndex(Map<String, Integer> titleMap, List<FieldForSortting> sorttingsFields) {
+        int localeHeaderIndex = 0;
+        List<Field> notNullFields = sorttingsFields.stream()
+                .map(FieldForSortting::getField)
+                .filter(f -> !f.getAnnotation(ExcelCell.class).valid().allowNull())
+                .collect(Collectors.toList());
+        if (CollectionUtils.isEmpty(notNullFields)) {
+            return localeHeaderIndex;
+        }
+        boolean continueFlag = true;
+        for (Field field : notNullFields) {
+            String[] headers = field.getAnnotation(ExcelCell.class).header();
+            for (int i = 0; i < headers.length; i++) {
+                if (titleMap.get(headers[i]) != null) {
+                    localeHeaderIndex = i;
+                    continueFlag = false;
+                    break;
+                }
+            }
+            if (!continueFlag) {
+                break;
+            }
+        }
+        return localeHeaderIndex;
+    }
+
+    //非空列不存在
+    private static boolean requiredColumnNotExist(ExcelLogs logs, StringBuilder log, Field field, Integer cellIndex) {
+        boolean allowNull = field.getAnnotation(ExcelCell.class).valid().allowNull();
+        if (cellIndex != null || allowNull) {
+            return false;
+        }
+        String errMsg = MessageFormat.format("No required [{0}] column found", field.getAnnotation(ExcelCell.class).header()[0]);
+        addExcelLog(logs, log, errMsg);
+        return true;
+
+    }
+
+    private static void addExcelLog(ExcelLogs logs, StringBuilder log, String errMsg) {
+        log.append(errMsg);
+        log.append(";");
+        logs.setHasError(true);
+    }
+
+    /**
+     * 根据Field的表头获取
+     *
+     * @param titleMap excel表头{表头名：列index}
+     * @param field
+     * @return
+     */
+    private static Integer getHeaderIndex(Map<String, Integer> titleMap, Field field) {
+        ExcelCell ec = field.getAnnotation(ExcelCell.class);
+        String[] headers = ec.header();
+        Integer cellIndex = null;
+        for (String header : headers) {
+            cellIndex = titleMap.get(header);
+            if (cellIndex != null) {
+                break;
+            }
+        }
+        return cellIndex;
+    }
+
     /**
      * 根据类型处理value值
      * 读取Excel时数值类型被处理为long或double类型，所以映射成实体属性的时候要进行相应的处理
+     *
      * @param type
      * @param value
      */
@@ -576,12 +661,13 @@ public class ExcelUtil {
     /**
      * 校验Cell类型是否正确
      *
-     * @param cell    cell单元格
-     * @param field   字段
-     * @param cellNum 第几列,用於errMsg
+     * @param cell             cell单元格
+     * @param field            字段
+     * @param cellNum          第几列,用於errMsg
+     * @param localeHeaderName 当前列的表头
      * @return
      */
-    private static String validateCell(Cell cell, Field field, int cellNum) {
+    private static String validateCell(Cell cell, Field field, int cellNum, String localeHeaderName) {
         String columnName = CellReference.convertNumToColString(cellNum);
         String result = null;
         CellType[] cellTypeArr = validateMap.get(field.getType());
@@ -591,7 +677,7 @@ public class ExcelUtil {
         }
         ExcelCell annoCell = field.getAnnotation(ExcelCell.class);
         if (!cellNullValid(cell, annoCell.valid().allowNull())) {
-            result = MessageFormat.format("the cell [{0}] can not null", columnName);
+            result = MessageFormat.format("the column [{0}] can not null", localeHeaderName);
         } else if (cell.getCellTypeEnum() == CellType.BLANK && annoCell.valid().allowNull()) {
             return result;
         } else {
@@ -608,7 +694,7 @@ public class ExcelUtil {
                     }
                 }
                 result =
-                        MessageFormat.format("the cell [{0}] type must [{1}]", columnName, strType.toString());
+                        MessageFormat.format("the column [{0}] type must [{1}]", localeHeaderName, strType.toString());
             } else {
                 // 类型符合验证,但值不在要求范围内的
                 // String in
@@ -622,7 +708,7 @@ public class ExcelUtil {
                         }
                     }
                     if (!isIn) {
-                        result = MessageFormat.format("the cell [{0}] value must in {1}", columnName, in);
+                        result = MessageFormat.format("the column [{0}] value must in {1}", localeHeaderName, in);
                     }
                 }
                 //todo 空值未判断
@@ -633,7 +719,7 @@ public class ExcelUtil {
                     if (!Double.isNaN(annoCell.valid().lt())) {
                         if (!(cellValue < annoCell.valid().lt())) {
                             result =
-                                    MessageFormat.format("the cell [{0}] value must less than [{1}]", columnName,
+                                    MessageFormat.format("the column [{0}] value must less than [{1}]", localeHeaderName,
                                             annoCell.valid().lt());
                         }
                     }
@@ -641,7 +727,7 @@ public class ExcelUtil {
                     if (!Double.isNaN(annoCell.valid().gt())) {
                         if (!(cellValue > annoCell.valid().gt())) {
                             result =
-                                    MessageFormat.format("the cell [{0}] value must greater than [{1}]", columnName,
+                                    MessageFormat.format("the column [{0}] value must greater than [{1}]", localeHeaderName,
                                             annoCell.valid().gt());
                         }
                     }
@@ -649,16 +735,16 @@ public class ExcelUtil {
                     if (!Double.isNaN(annoCell.valid().le())) {
                         if (!(cellValue <= annoCell.valid().le())) {
                             result =
-                                    MessageFormat.format("the cell [{0}] value must less than or equal [{1}]",
-                                            columnName, annoCell.valid().le());
+                                    MessageFormat.format("the column [{0}] value must less than or equal [{1}]",
+                                            localeHeaderName, annoCell.valid().le());
                         }
                     }
                     // 大于等于
                     if (!Double.isNaN(annoCell.valid().ge())) {
                         if (!(cellValue >= annoCell.valid().ge())) {
                             result =
-                                    MessageFormat.format("the cell [{0}] value must greater than or equal [{1}]",
-                                            columnName, annoCell.valid().ge());
+                                    MessageFormat.format("the column [{0}] value must greater than or equal [{1}]",
+                                            localeHeaderName, annoCell.valid().ge());
                         }
                     }
                 }
