@@ -15,12 +15,19 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <java.version>1.8</java.version>
         <junit.version>4.12</junit.version>
         <org.slf4j.version>1.7.25</org.slf4j.version>
         <sl4j-log4j12.version>1.7.25</sl4j-log4j12.version>
         <log4j-version>1.2.17</log4j-version>
         <commons-beanutils.version>1.9.3</commons-beanutils.version>
+        <org.apache.poi.version>3.17</org.apache.poi.version>
+        <commons-lang3.version>3.6</commons-lang3.version>
+        <commons-collections.version>3.2.2</commons-collections.version>
+        <spring.version>4.2.1.RELEASE</spring.version>
     </properties>
+
 
 
     <repositories>
@@ -38,6 +45,19 @@
     <dependencies>
 
         <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context-support</artifactId>
+            <version>${spring.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+            <version>23.0</version>
+        </dependency>
+
+
+        <dependency>
             <groupId>commons-beanutils</groupId>
             <artifactId>commons-beanutils</artifactId>
             <version>${commons-beanutils.version}</version>
@@ -45,29 +65,26 @@
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
-            <version>3.6</version>
+            <version>${commons-lang3.version}</version>
         </dependency>
         <dependency>
             <groupId>commons-collections</groupId>
             <artifactId>commons-collections</artifactId>
-            <version>3.2.2</version>
+            <version>${commons-collections.version}</version>
         </dependency>
 
-        <!--================================================ apache-poi ============================================-->
 
         <dependency>
             <groupId>org.apache.poi</groupId>
             <artifactId>poi</artifactId>
-            <version>3.17</version>
+            <version>${org.apache.poi.version}</version>
         </dependency>
         <dependency>
             <groupId>org.apache.poi</groupId>
             <artifactId>poi-ooxml</artifactId>
-            <version>3.17</version>
+            <version>${org.apache.poi.version}</version>
         </dependency>
 
-
-        <!--================================================ 日志相关 ============================================-->
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
@@ -84,16 +101,21 @@
             <version>${log4j-version}</version>
         </dependency>
 
-        <!--================================================ 测试相关 ============================================-->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>jcl-over-slf4j</artifactId>
+            <version>1.7.12</version>
+        </dependency>
+
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
             <version>${junit.version}</version>
             <scope>test</scope>
         </dependency>
+
+
     </dependencies>
-
-
 
     <build>
         <finalName>springParentStudy</finalName>

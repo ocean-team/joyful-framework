@@ -3,12 +3,36 @@ package org.joyful4j.modules.excel;
 import org.apache.commons.beanutils.BeanComparator;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.ComparatorUtils;
+import org.apache.commons.collections.MapUtils;
 import org.apache.commons.collections.comparators.ComparableComparator;
 import org.apache.commons.collections.comparators.ComparatorChain;
+import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.poi.hssf.usermodel.*;
-import org.apache.poi.ss.usermodel.*;
-import org.apache.poi.ss.util.CellReference;
+import org.apache.poi.EncryptedDocumentException;
+import org.apache.poi.hssf.usermodel.HSSFCell;
+import org.apache.poi.hssf.usermodel.HSSFRichTextString;
+import org.apache.poi.hssf.usermodel.HSSFRow;
+import org.apache.poi.hssf.usermodel.HSSFSheet;
+import org.apache.poi.hssf.usermodel.HSSFWorkbook;
+import org.apache.poi.openxml4j.exceptions.InvalidFormatException;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellType;
+import org.apache.poi.ss.usermodel.DateUtil;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.usermodel.WorkbookFactory;
+import org.joyful4j.modules.excel.annotation.ExcelCell;
+import org.joyful4j.modules.excel.annotation.ExcelConfig;
+import org.joyful4j.modules.excel.constants.ExcelDefaultConstants;
+import org.joyful4j.modules.excel.entity.CellTypeMode;
+import org.joyful4j.modules.excel.entity.ExcelI18nStrategyType;
+import org.joyful4j.modules.excel.entity.ExcelSheet;
+import org.joyful4j.modules.excel.entity.FieldForSortting;
+import org.joyful4j.modules.excel.exception.ExcelException;
+import org.joyful4j.modules.excel.logs.ExcelLog;
+import org.joyful4j.modules.excel.logs.ExcelLogs;
+import org.joyful4j.modules.excel.logs.ExcelRowLog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -30,6 +54,9 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -41,40 +68,33 @@ import java.util.stream.Collectors;
 public class ExcelUtil {
 
     private static Logger logger = LoggerFactory.getLogger(ExcelUtil.class);
-    private static final String DEFAULT_OUTPUT_DATE_PATTERN = "yyyy-MM-dd"; //日期类型默认输出格式
 
-    /**
-     * 用来验证excel与Vo中的类型是否一致 <br>
-     * Map<栏位类型,只能是哪些Cell类型>
-     */
-    private static Map<Class<?>, CellType[]> validateMap = new HashMap<>();
+    private static final Pattern NUMBER_PATTERN = Pattern.compile("[1-9]+[0-9]*(\\.[0-9]+)*");
 
-    static {
-        validateMap.put(String[].class, new CellType[]{CellType.STRING});
-        validateMap.put(Double[].class, new CellType[]{CellType.NUMERIC});
-        validateMap.put(String.class, new CellType[]{CellType.STRING});
-        validateMap.put(Double.class, new CellType[]{CellType.NUMERIC});
-        validateMap.put(Date.class, new CellType[]{CellType.NUMERIC, CellType.STRING});
-        validateMap.put(Integer.class, new CellType[]{CellType.NUMERIC});
-        validateMap.put(Float.class, new CellType[]{CellType.NUMERIC});
-        validateMap.put(Long.class, new CellType[]{CellType.NUMERIC});
-        validateMap.put(Boolean.class, new CellType[]{CellType.BOOLEAN});
+
+    public static void main(String[] args) {
+
+        String num1 = "20.1";
+
+        Matcher integerMatcher =  NUMBER_PATTERN.matcher(num1);
+        System.out.println(integerMatcher.matches());
+
+        Double.parseDouble(num1);
+
+
+
+
     }
+
 
     /**
      * 获取cell类型的文字描述
      *
      * @param cellType <pre>
-     *                 CellType.BLANK
-     *                 CellType.BOOLEAN
-     *                 CellType.ERROR
-     *                 CellType.FORMULA
-     *                 CellType.NUMERIC
-     *                 CellType.STRING
-     *                 </pre>
-     * @return
+     *                                                                                                                                                                                 CellType.BLANK
+     *                 @return
      */
-    private static String getCellTypeByInt(CellType cellType) {
+    private static String getCellTypeByInt(CellType cellType, CellTypeMode cellTypeMode) {
         switch (cellType) {
             case BLANK:
                 return "Null type";
@@ -85,9 +105,22 @@ public class ExcelUtil {
             case FORMULA:
                 return "Formula type";
             case NUMERIC:
-                return "Numeric type";
+                switch (cellTypeMode) {
+                    /*case STRICT:
+                        return "Numeric type ";*/
+                    case LOOSE:
+                    default:
+                        return "Numeric type or String type or Date type";
+                }
             case STRING:
-                return "String type";
+                switch (cellTypeMode) {
+                    /*case STRICT:
+                        return "String type or Null type";*/
+                    case LOOSE:
+                    default:
+                        return "String type or Numeric type or String type or Date type";
+                }
+
             default:
                 return "Unknown type";
         }
@@ -97,9 +130,10 @@ public class ExcelUtil {
      * 获取单元格值
      *
      * @param cell
+     * @param excelConfig
      * @return
      */
-    private static Object getCellValue(Cell cell) {
+    private static Object getCellValue(Cell cell, ExcelConfig excelConfig) {
 
         if (isNullOrBlankStringCell(cell)) {
             return null;
@@ -119,7 +153,6 @@ public class ExcelUtil {
                 if (DateUtil.isCellDateFormatted(cell)) {
                     return cell.getDateCellValue();
                 } else {
-                    Object inputValue = null;
                     double doubleVal = cell.getNumericCellValue();
                     long longVal = Math.round(cell.getNumericCellValue());
                     if (Double.parseDouble(longVal + ".0") == doubleVal) {
@@ -129,7 +162,12 @@ public class ExcelUtil {
                 }
 
             case STRING:
-                return cell.getStringCellValue();
+                String cellValue = cell.getStringCellValue();
+                if (StringUtils.isNotBlank(cellValue) && excelConfig != null && StringUtils.isNotEmpty(excelConfig.globalRemovePattern())) {
+                    cellValue.trim();
+                    cellValue.replaceAll(excelConfig.globalRemovePattern(), "");
+                }
+                return cellValue;
             default:
                 return null;
         }
@@ -143,19 +181,24 @@ public class ExcelUtil {
      * @return
      */
     private static boolean isNullOrBlankStringCell(Cell cell) {
-        return cell.getCellTypeEnum() == CellType.STRING
-                && StringUtils.isBlank(cell.getStringCellValue());
+        return cell == null
+                || cell.getCellTypeEnum() == CellType.BLANK
+                || (cell.getCellTypeEnum() == CellType.STRING && StringUtils.isBlank(cell.getStringCellValue()));
     }
 
     /**
-     * 利用JAVA的反射机制，将放置在JAVA集合中并且符合一定条件的数据以EXCEL 的形式输出到指定IO设备上<br>
-     * 用于单个sheet
+     * 单个sheet导出
+     * 导出数据可以是：
+     * 1.javabean类型的对象集合
+     * 2.Map类型的对象集合
+     * 3.表头顺序由Map的key顺序决定
+     * 4.如果导出javabean类型对象，数据顺序由@ExcellCell注解的index属性决定
      *
      * @param <T>
-     * @param headers 表格属性列名
-     * @param dataset 需要显示的数据集合,集合中一定要放置符合javabean风格的类的对象。此方法支持的
-     *                javabean属性的数据类型有基本数据类型及String,Date,String[],Double[]
-     * @param out     与输出设备关联的流对象
+     * @param headers 表头列名 map<key,columnName> 如果导出数据是map类型则该key要与map对象的key对应
+     * @param dataset 需要显示的数据集合,集合中可以市javabean风格的类的对象或者Map类型的对象。
+     *                支持的javabean属性的数据类型有基本数据类型及String,Date,String[],Double[]
+     * @param out
      */
     public static <T> void exportExcel(Map<String, String> headers, Collection<T> dataset, OutputStream out) {
         exportExcel(headers, dataset, out, null);
@@ -174,13 +217,10 @@ public class ExcelUtil {
      */
     public static <T> void exportExcel(Map<String, String> headers, Collection<T> dataset, OutputStream out,
                                        String datePattern) {
-        // 声明一个工作薄
-        HSSFWorkbook workbook = new HSSFWorkbook();
-        // 生成一个表格
-        HSSFSheet sheet = workbook.createSheet();
-
-        write2Sheet(sheet, headers, dataset, datePattern);
-        try {
+        try (HSSFWorkbook workbook = new HSSFWorkbook()) {
+            // 生成一个表格
+            HSSFSheet sheet = workbook.createSheet();
+            write2Sheet(sheet, headers, dataset, datePattern);
             workbook.write(out);
         } catch (IOException e) {
             logger.error(e.toString(), e);
@@ -194,9 +234,7 @@ public class ExcelUtil {
      * @param out
      */
     public static void exportExcel(String[][] datalist, OutputStream out) {
-        try {
-            // 声明一个工作薄
-            HSSFWorkbook workbook = new HSSFWorkbook();
+        try (HSSFWorkbook workbook = new HSSFWorkbook()) {
             // 生成一个表格
             HSSFSheet sheet = workbook.createSheet();
 
@@ -251,14 +289,13 @@ public class ExcelUtil {
         if (CollectionUtils.isEmpty(sheets)) {
             return;
         }
-        // 声明一个工作薄
-        HSSFWorkbook workbook = new HSSFWorkbook();
-        for (ExcelSheet<T> sheet : sheets) {
-            // 生成一个表格
-            HSSFSheet hssfSheet = workbook.createSheet(sheet.getSheetName());
-            write2Sheet(hssfSheet, sheet.getHeaders(), sheet.getDataset(), datePattern);
-        }
-        try {
+        try (HSSFWorkbook workbook = new HSSFWorkbook()) {
+
+            for (ExcelSheet<T> sheet : sheets) {
+                // 生成一个表格
+                HSSFSheet hssfSheet = workbook.createSheet(sheet.getSheetName());
+                write2Sheet(hssfSheet, sheet.getHeaders(), sheet.getDataset(), datePattern);
+            }
             workbook.write(out);
         } catch (IOException e) {
             logger.error(e.toString(), e);
@@ -277,15 +314,17 @@ public class ExcelUtil {
                                         String datePattern) {
         //时间格式默认"yyyy-MM-dd"
         if (StringUtils.isEmpty(datePattern)) {
-            datePattern = DEFAULT_OUTPUT_DATE_PATTERN;
+            datePattern = ExcelDefaultConstants.DEFAULT_OUTPUT_DATE_PATTERN;
         }
         // 产生表格标题行
         HSSFRow row = sheet.createRow(0);
         // 标题行转中文
         Set<String> headerKeys = headers.keySet();
         Iterator<String> it1 = headerKeys.iterator();
-        String key = "";    //存放临时键变量
-        int c = 0;   //标题列数
+        //存放临时键变量
+        String key = "";
+        //标题列数
+        int c = 0;
         while (it1.hasNext()) {
             key = it1.next();
             HSSFCell cell = row.createCell(c);
@@ -403,244 +442,276 @@ public class ExcelUtil {
     /**
      * 把Excel的数据封装成voList
      *
-     * @param clazz       vo的Class支持Map类型
-     * @param inputStream excel输入流
-     * @param pattern     如果有时间数据，设定输入格式。默认为"yyy-MM-dd"
-     * @param logs        错误log集合
-     * @param arrayCount  如果vo中有数组类型,那就按照index顺序,把数组应该有几个值写上.
+     * @param clazz        输出数据类型,支持 javabean.class 或 Map.class
+     * @param importHeader Map<String,List<String>> 输出类型为javaBean时，必须提供表头Map，key用于同javabean的字段对应
+     * @param inputStream  excel输入流
+     * @param pattern      如果有时间数据，设定输入格式。默认为"yyy-MM-dd"
+     * @param logs         错误log集合
      * @return voList
      * @throws RuntimeException
      */
-    public static <T> Collection<T> importExcel(Class<T> clazz, InputStream inputStream,
-                                                String pattern, ExcelLogs logs, Integer... arrayCount) {
-        Workbook workBook;
-        try {
-            //支持.xls和.xlsx
-            workBook = WorkbookFactory.create(inputStream);
-        } catch (Exception e) {
-            logger.error("load excel file error", e);
-            return null;
+    public static <T> Collection<T> importExcel(Class<T> clazz, Map<String, List<String>> importHeader, InputStream inputStream,
+                                                String pattern, ExcelLogs logs) {
+
+        Sheet sheet = getSheetFromWorkbook(inputStream, logs);
+        if (sheet == null) {
+            return new ArrayList<>();
         }
-        List<T> list = new ArrayList<>();
-        Sheet sheet = workBook.getSheetAt(0);
+
+        ExcelConfig excelConfig = clazz.getAnnotation(ExcelConfig.class);
+        List<T> resultList = new ArrayList<>();
+        List<ExcelRowLog> rowLogList = new ArrayList<>();
+
+
         Iterator<Row> rowIterator = sheet.rowIterator();
-        try {
-            List<ExcelLog> logList = new ArrayList<>();
-            // Map<title,index>
-            Map<String, Integer> titleMap = new HashMap<>();
+        // 从excel读取的表头 Map<title,index>
+        Map<String, Integer> fileHeaderIndexMap = new HashMap<>();
+        while (rowIterator.hasNext()) {
+            StringBuilder log = new StringBuilder();
+            Row row = rowIterator.next();
+            if (row.getRowNum() == 0) {
+                fileHeaderIndexMap = convertRowToHeaderMap(row);
+                continue;
+            }
+            // 跳过空行,并记录日志
+            boolean isBlankRow = checkBlankRow(excelConfig, row);
+            if (isBlankRow) {
+                rowLogList.add(new ExcelRowLog("The row is blank", row.getRowNum() + 1));
+                continue;
+            }
 
-            while (rowIterator.hasNext()) {
-                Row row = rowIterator.next();
-                if (row.getRowNum() == 0) {
-                    // 解析map用的key,就是excel标题行
-                    Iterator<Cell> cellIterator = row.cellIterator();
-                    while (cellIterator.hasNext()) {
-                        Cell cell = cellIterator.next();
-                        String value = cell.getStringCellValue();
-                        titleMap.put(value, cell.getColumnIndex());
-                    }
-                    continue;
-                }
-                // 整行都空，就跳过
-                boolean allRowIsNull = true;
-                Iterator<Cell> cellIterator = row.cellIterator();
-                while (cellIterator.hasNext()) {
-                    Object cellValue = getCellValue(cellIterator.next());
-                    if (cellValue != null) {
-                        allRowIsNull = false;
-                        break;
-                    }
-                }
-                if (allRowIsNull) {
-                    //todo 空行处理
-                    logger.warn("Excel row " + row.getRowNum() + " all row value is null!");
-                    continue;
-                }
-                StringBuilder log = new StringBuilder();
-                if (clazz == Map.class) {
-                    Map<String, Object> map = new HashMap<>();
-                    for (String k : titleMap.keySet()) {
-                        Integer index = titleMap.get(k);
-                        Cell cell = row.getCell(index);
-                        // 判空
-                        if (cell == null) {
-                            map.put(k, null);
-                        } else {
-                            cell.setCellType(CellType.STRING);
-                            String value = cell.getStringCellValue();
-                            map.put(k, value);
-                        }
-                    }
-                    list.add((T) map);
+            //输出数据类型是Map时，简单将数据封装为Map<headerName,i18nStrategy>
+            if (clazz == Map.class) {
+                Map<String, Object> map = handleExcelRowToMap(fileHeaderIndexMap, row);
+                resultList.add((T) map);
+            } else {
 
+                T excelEntityVo = handleExcelRowToJavabean(clazz, importHeader, pattern, excelConfig, fileHeaderIndexMap, log, row);
+                if (StringUtils.isBlank(log.toString())) {
+                    resultList.add(excelEntityVo);
                 } else {
-                    //fixme 表头导入要支持乱序
-                    T t = clazz.newInstance();
-                    int arrayIndex = 0;// 标识当前第几个数组了
-                    //fixme 导入时不能通过index顺序
-                    List<FieldForSortting> sorttingsFields = sortFieldByAnno(clazz);
+                    rowLogList.add(new ExcelRowLog(excelEntityVo, log.toString(), row.getRowNum() + 1));
+                }
 
-                    int localeHeaderIndex = getLocaleIndex(titleMap, sorttingsFields);
+            }
+        }
+        logs.setRowLogList(rowLogList);
+        return resultList;
+    }
 
-                    for (FieldForSortting ffs : sorttingsFields) {
-                        Field field = ffs.getField();
-                        Integer cellIndex = getHeaderIndex(titleMap, field);
+    private static <T> T handleExcelRowToJavabean(Class<T> clazz, Map<String, List<String>> importHeader, String pattern, ExcelConfig excelConfig, Map<String, Integer> fileHeaderIndexMap, StringBuilder log, Row row) {
 
-                        if (requiredColumnNotExist(logs, log, field, cellIndex)) {
-                            continue;
-                        }
-                        String localeHeaderName = getLocaleHeaderName(localeHeaderIndex, field);
+        T excelEntityVo = null;
+        try {
+            excelEntityVo = clazz.newInstance();
+        } catch (InstantiationException | IllegalAccessException e) {
+            throw new ExcelException(MessageFormat.format("can not instance class:{0}", clazz.getSimpleName()), e);
+        }
 
-                        field.setAccessible(true);
-                        if (field.getType().isArray()) {
-                            Integer count = arrayCount[arrayIndex];
-                            Object[] value;
-                            if (field.getType().equals(String[].class)) {
-                                value = new String[count];
-                            } else {
-                                // 目前只支持String[]和Double[]
-                                value = new Double[count];
-                            }
-                            for (int i = 0; i < count; i++) {
-                                Cell cell = row.getCell(cellIndex);
-                                String errMsg = validateCell(cell, field, cellIndex, localeHeaderName);
-                                if (StringUtils.isBlank(errMsg)) {
-                                    value[i] = getCellValue(cell);
-                                } else {
-                                    addExcelLog(logs, log, errMsg);
-                                }
-                            }
-                            field.set(t, value);
-                            arrayIndex++;
-                        } else {
-                            Cell cell = row.getCell(cellIndex);
-                            String errMsg = validateCell(cell, field, cellIndex, localeHeaderName);
-                            if (StringUtils.isBlank(errMsg)) {
-                                Object value = null;
-                                // 处理特殊情况,Excel中的String,转换成Bean的Date
-                                if (field.getType().equals(Date.class)
-                                        && cell.getCellTypeEnum() == CellType.STRING) {
-                                    Object strDate = getCellValue(cell);
-                                    try {
-                                        //fixme 时间格式处理
-                                        value = new SimpleDateFormat(pattern).parse(strDate.toString());
-
-                                    } catch (ParseException e) {
-                                        errMsg =
-                                                MessageFormat.format("the column [{0}] can not be converted to a date ", localeHeaderName);
-                                    }
-                                } else {
-                                    value = getCellValue(cell);
-                                    // 处理特殊情况,excel的value为String,且bean中为其他,且defaultValue不为空,那就=defaultValue
-                                    ExcelCell annoCell = field.getAnnotation(ExcelCell.class);
-                                    if (value instanceof String && !field.getType().equals(String.class)
-                                            && StringUtils.isNotBlank(annoCell.defaultValue())) {
-                                        value = annoCell.defaultValue();
-                                    }
-                                }
-                                value = convertToFieldValue(field.getType(), value);
-                                field.set(t, value);
-                            }
-                            if (StringUtils.isNotBlank(errMsg)) {
-                                addExcelLog(logs, log, errMsg);
-                            }
-                        }
-                    }
-                    list.add(t);
-                    logList.add(new ExcelLog(t, log.toString(), row.getRowNum() + 1));
+        List<Field> excelCellFields = getExcelCellField(clazz);
+        for (Field field : excelCellFields) {
+            String importHeaderKey = field.getAnnotation(ExcelCell.class).importHeaderKey();
+            if (StringUtils.isBlank(importHeaderKey)) {
+                //未指定表头key，无法确定对应表头
+                continue;
+            }
+            //通过国际化策略得到或者传入的表头
+            List<String> configHeaders = getI18nHeadersByStrategy(clazz.getAnnotation(ExcelConfig.class), importHeaderKey);
+            if (CollectionUtils.isEmpty(configHeaders) && MapUtils.isNotEmpty(importHeader)) {
+                configHeaders = importHeader.get(importHeaderKey);
+                if (CollectionUtils.isEmpty(configHeaders)) {
+                    //输入表头和国际化策略取的表头均无此表头时忽略不导入
+                    continue;
                 }
             }
-            logs.setLogList(logList);
-        } catch (InstantiationException e) {
-            throw new RuntimeException(MessageFormat.format("can not instance class:{0}",
-                    clazz.getSimpleName()), e);
-        } catch (IllegalAccessException e) {
-            throw new RuntimeException(MessageFormat.format("can not instance class:{0}",
-                    clazz.getSimpleName()), e);
-        }
-        return list;
-    }
 
-    //获取当前索引表头
-    private static String getLocaleHeaderName(int localeHeaderIndex, Field field) {
-        String[] headers = field.getAnnotation(ExcelCell.class).header();
-        String localeHeaderName = headers[0];
-        if (headers.length > localeHeaderIndex) {
-            localeHeaderName = headers[localeHeaderIndex];
-        }
-        return localeHeaderName;
-    }
-
-    /**
-     * 根据表头非空字段，判断多语言表头索引，若没有默认0
-     *
-     * @param titleMap        表头{列名，列索引}
-     * @param sorttingsFields 所有字段
-     * @return
-     */
-    private static int getLocaleIndex(Map<String, Integer> titleMap, List<FieldForSortting> sorttingsFields) {
-        int localeHeaderIndex = 0;
-        List<Field> notNullFields = sorttingsFields.stream()
-                .map(FieldForSortting::getField)
-                .filter(f -> !f.getAnnotation(ExcelCell.class).valid().allowNull())
-                .collect(Collectors.toList());
-        if (CollectionUtils.isEmpty(notNullFields)) {
-            return localeHeaderIndex;
-        }
-        boolean continueFlag = true;
-        for (Field field : notNullFields) {
-            String[] headers = field.getAnnotation(ExcelCell.class).header();
-            for (int i = 0; i < headers.length; i++) {
-                if (titleMap.get(headers[i]) != null) {
-                    localeHeaderIndex = i;
-                    continueFlag = false;
+            String currentHeaderName = "";
+            Integer cellIndex = null;
+            for (String header : configHeaders) {
+                cellIndex = fileHeaderIndexMap.get(header);
+                if (cellIndex != null) {
+                    currentHeaderName = header;
                     break;
                 }
             }
-            if (!continueFlag) {
+
+            if (requiredColumnNotExist(log, field, cellIndex)) {
+                continue;
+            }
+
+            field.setAccessible(true);
+            Cell cell = row.getCell(cellIndex);
+            String errMsg = validateCell(cell, field, cellIndex, currentHeaderName);
+            if (StringUtils.isNotBlank(errMsg)) {
+                appendToExcelRowLog(log, errMsg);
+                continue;
+            }
+
+            Object excelValueObj = null;
+            try {
+                excelValueObj = setExcelValueObj(field, pattern, excelValueObj, cell, excelConfig);
+            } catch (ParseException e) {
+                errMsg = MessageFormat.format("the column [{0}] can not be converted to a date ", currentHeaderName);
+                appendToExcelRowLog(log, errMsg);
+                continue;
+            }
+
+            if (StringUtils.isNotBlank(errMsg)) {
+                appendToExcelRowLog(log, errMsg);
+                continue;
+            }
+            if (excelValueObj == null) {
+                continue;
+            }
+
+            excelValueObj = convertToFieldValue(field.getType(), excelValueObj);
+            try {
+                field.set(excelEntityVo, excelValueObj);
+            } catch (IllegalAccessException e) {
+                throw new ExcelException(MessageFormat.format("Can not set a value {0} for Object: {1} - field: {2}", excelValueObj, clazz.getSimpleName(), field.getName()), e);
+            }
+        }
+        return excelEntityVo;
+    }
+
+    private static Object setExcelValueObj(Field field, String pattern, Object excelValueObj, Cell cell, ExcelConfig excelConfig) throws ParseException {
+
+        // String类型的日期转换
+        if (field.getType().equals(Date.class) && cell.getCellTypeEnum() == CellType.STRING) {
+            Object strDate = getCellValue(cell, excelConfig);
+
+            //fixme 时间格式处理
+            excelValueObj = new SimpleDateFormat(pattern).parse(strDate.toString());
+
+        } else {
+            excelValueObj = getCellValue(cell, excelConfig);
+            // 处理特殊情况,excel的value为String,且bean中为其他,且defaultValue不为空,那就=defaultValue
+            ExcelCell annoCell = field.getAnnotation(ExcelCell.class);
+            if (excelValueObj instanceof String && !field.getType().equals(String.class) && StringUtils.isNotBlank(annoCell.defaultValue())) {
+                excelValueObj = annoCell.defaultValue();
+            }
+        }
+        return excelValueObj;
+    }
+
+    private static Map<String, Object> handleExcelRowToMap(Map<String, Integer> fileHeaderIndexMap, Row row) {
+        Map<String, Object> map = new HashMap<>();
+        for (String fileHeaderName : fileHeaderIndexMap.keySet()) {
+            Integer headerIndex = fileHeaderIndexMap.get(fileHeaderName);
+            Cell cell = row.getCell(headerIndex);
+            // 判空
+            if (cell == null) {
+                map.put(fileHeaderName, null);
+            } else {
+                //fixme 读取各种类型数据
+                cell.setCellType(CellType.STRING);
+                String value = cell.getStringCellValue();
+                map.put(fileHeaderName, value);
+            }
+        }
+        return map;
+    }
+
+    private static boolean checkBlankRow(ExcelConfig excelConfig, Row row) {
+        boolean allRowIsNull = true;
+        Iterator<Cell> cellIterator = row.cellIterator();
+        while (cellIterator.hasNext()) {
+            Object cellValue = getCellValue(cellIterator.next(), excelConfig);
+            if (cellValue != null && StringUtils.isNotBlank(String.valueOf(cellValue))) {
+                allRowIsNull = false;
                 break;
             }
         }
-        return localeHeaderIndex;
+        return allRowIsNull;
     }
 
-    //非空列不存在
-    private static boolean requiredColumnNotExist(ExcelLogs logs, StringBuilder log, Field field, Integer cellIndex) {
-        boolean allowNull = field.getAnnotation(ExcelCell.class).valid().allowNull();
-        if (cellIndex != null || allowNull) {
-            return false;
+    private static Sheet getSheetFromWorkbook(InputStream inputStream, ExcelLogs logs) {
+        Sheet sheet = null;
+        try (Workbook workBook = WorkbookFactory.create(inputStream)) {
+            //支持.xls和.xlsx
+            sheet = workBook.getSheetAt(0);
+        } catch (EncryptedDocumentException e) {
+            logger.info(e.getMessage());
+            addToExcelLogs(logs, "Excel不能存在密码;");
+        } catch (InvalidFormatException e) {
+            logger.info(e.getMessage());
+            addToExcelLogs(logs, "Excel格式错误或存在密码;");
+        } catch (Exception e) {
+            logger.error("load excel file error", e);
+            addToExcelLogs(logs, "Excel格式错误;");
         }
-        String errMsg = MessageFormat.format("No required [{0}] column found", field.getAnnotation(ExcelCell.class).header()[0]);
-        addExcelLog(logs, log, errMsg);
-        return true;
-
+        return sheet;
     }
 
-    private static void addExcelLog(ExcelLogs logs, StringBuilder log, String errMsg) {
-        log.append(errMsg);
-        log.append(";");
-        logs.setHasError(true);
+    private static boolean addToExcelLogs(ExcelLogs logs, String log) {
+        return logs.getExcelLogs().add(new ExcelLog(log));
+    }
+
+    private static List<String> getI18nHeadersByStrategy(ExcelConfig excelConfig, String importHeaderKey) {
+        List<String> i18nHeaders = new ArrayList<>();
+        if (excelConfig != null) {
+            ExcelI18nStrategyType excelI18nStrategyType = excelConfig.i18nStrategy();
+            switch (excelI18nStrategyType) {
+                case EXCEL_I18N_STRATEGY_PROPS:
+                    String propsFileName = excelConfig.propsFileName();
+                    if (StringUtils.isNotBlank(propsFileName)) {
+                        try {
+                            i18nHeaders = CatcheExcelI18nProps.getI18SortedHeaders(importHeaderKey, propsFileName);
+                        } catch (ExecutionException e) {
+                            logger.error("根据词条key从配置文件中获取表头时失败，importHeaderKey：" + importHeaderKey + ",propsFileName:" + propsFileName + e.getStackTrace());
+                            throw new ExcelException("Error reading Excel configuration file");
+                        }
+                    }
+                    break;
+                default:
+            }
+        }
+        return i18nHeaders;
     }
 
     /**
-     * 根据Field的表头获取
+     * row转Map<列名，列index>
      *
-     * @param titleMap excel表头{表头名：列index}
-     * @param field
+     * @param row
      * @return
      */
-    private static Integer getHeaderIndex(Map<String, Integer> titleMap, Field field) {
-        ExcelCell ec = field.getAnnotation(ExcelCell.class);
-        String[] headers = ec.header();
-        Integer cellIndex = null;
-        for (String header : headers) {
-            cellIndex = titleMap.get(header);
-            if (cellIndex != null) {
-                break;
+    private static Map<String, Integer> convertRowToHeaderMap(Row row) {
+        Map<String, Integer> fileMap = new HashMap<>();
+        Iterator<Cell> cellIterator = row.cellIterator();
+        while (cellIterator.hasNext()) {
+            Cell cell = cellIterator.next();
+            String value = cell.getStringCellValue();
+            fileMap.put(value, cell.getColumnIndex());
+        }
+        return fileMap;
+    }
+
+
+    //非空列不存在
+    private static boolean requiredColumnNotExist(StringBuilder log, Field field, Integer cellIndex) {
+        boolean nextField = false;
+        boolean columnNotExist = (cellIndex == null || cellIndex < 0);
+        if (columnNotExist) {
+            nextField = true;
+            ExcelCell.Valid excelValid = field.getAnnotation(ExcelCell.Valid.class);
+            if (excelValid != null && !excelValid.allowNull()) {
+                ExcelCell excelCell = field.getAnnotation(ExcelCell.class);
+                String defaultHeaderName = "";
+                if (excelCell != null) {
+                    defaultHeaderName = excelCell.defaultHeaderName();
+                }
+                String errMsg = MessageFormat.format("No required [{0}] column found", defaultHeaderName);
+                appendToExcelRowLog(log, errMsg);
             }
         }
-        return cellIndex;
+        return nextField;
     }
+
+    private static void appendToExcelRowLog(StringBuilder log, String errMsg) {
+        log.append(errMsg);
+        log.append(";");
+    }
+
 
     /**
      * 根据类型处理value值
@@ -654,6 +725,8 @@ public class ExcelUtil {
             return Integer.parseInt(value.toString());
         } else if (Double.class == type) {
             return Double.parseDouble(value.toString());
+        } else if (String.class == type) {
+            return value.toString();
         }
         return value;
     }
@@ -668,17 +741,37 @@ public class ExcelUtil {
      * @return
      */
     private static String validateCell(Cell cell, Field field, int cellNum, String localeHeaderName) {
-        String columnName = CellReference.convertNumToColString(cellNum);
         String result = null;
-        CellType[] cellTypeArr = validateMap.get(field.getType());
+        ExcelCell annoCell = field.getAnnotation(ExcelCell.class);
+
+        CellTypeMode cellTypeMode = annoCell.cellTypeMode();
+        CellType[] cellTypeArr = null;
+
+        switch (cellTypeMode) {
+           /* case STRICT:
+                cellTypeArr = ExcelDefaultConstants.strickValidateMap.get(field.getType());
+                break;*/
+            case LOOSE:
+            default:
+                cellTypeArr = ExcelDefaultConstants.looseValidateMap.get(field.getType());
+                break;
+
+        }
+
         if (cellTypeArr == null) {
             result = MessageFormat.format("Unsupported type [{0}]", field.getType().getSimpleName());
             return result;
         }
-        ExcelCell annoCell = field.getAnnotation(ExcelCell.class);
-        if (!cellNullValid(cell, annoCell.valid().allowNull())) {
-            result = MessageFormat.format("the column [{0}] can not null", localeHeaderName);
-        } else if (cell.getCellTypeEnum() == CellType.BLANK && annoCell.valid().allowNull()) {
+        if (annoCell == null) {
+            return result;
+        }
+        ExcelCell.Valid excelValid = field.getAnnotation(ExcelCell.Valid.class);
+        if (excelValid == null) {
+            return result;
+        }
+        if (!cellNullValid(cell, excelValid.allowNull())) {
+            result = MessageFormat.format("the column [{0}] can not be null", localeHeaderName);
+        } else if (allowBlankCell(cell, excelValid)) {
             return result;
         } else {
             List<CellType> cellTypes = Arrays.asList(cellTypeArr);
@@ -688,18 +781,17 @@ public class ExcelUtil {
                 StringBuilder strType = new StringBuilder();
                 for (int i = 0; i < cellTypes.size(); i++) {
                     CellType cellType = cellTypes.get(i);
-                    strType.append(getCellTypeByInt(cellType));
+                    strType.append(getCellTypeByInt(cellType, annoCell.cellTypeMode()));
                     if (i != cellTypes.size() - 1) {
                         strType.append(",");
                     }
                 }
-                result =
-                        MessageFormat.format("the column [{0}] type must [{1}]", localeHeaderName, strType.toString());
+                result = MessageFormat.format("the column [{0}] type must [{1}]", localeHeaderName, strType.toString());
             } else {
                 // 类型符合验证,但值不在要求范围内的
                 // String in
-                if (annoCell.valid().in().length != 0 && cell.getCellTypeEnum() == CellType.STRING) {
-                    String[] in = annoCell.valid().in();
+                if (excelValid.in().length != 0 && cell.getCellTypeEnum() == CellType.STRING) {
+                    String[] in = excelValid.in();
                     String cellValue = cell.getStringCellValue();
                     boolean isIn = false;
                     for (String str : in) {
@@ -708,49 +800,70 @@ public class ExcelUtil {
                         }
                     }
                     if (!isIn) {
-                        result = MessageFormat.format("the column [{0}] value must in {1}", localeHeaderName, in);
+                        result = MessageFormat.format("the column [{0}] must in {1}", localeHeaderName, in);
                     }
                 }
-                //todo 空值未判断
-                // 数字型
-                if (cell.getCellTypeEnum() == CellType.NUMERIC) {
-                    double cellValue = cell.getNumericCellValue();
+                // 数值型 或 可以转为数值的String
+                if (cell.getCellTypeEnum() == CellType.NUMERIC || cell.getCellTypeEnum() == CellType.STRING) {
+                    double cellValue = 0D;
+                    if (cell.getCellTypeEnum() == CellType.STRING) {
+                        String cellValueStr = cell.getStringCellValue();
+                        if(matchNumber(cellValueStr)){
+                            cellValue = Double.parseDouble(cellValueStr);
+                        }else{
+                            return result;
+                        }
+
+                    }else{
+                        cellValue = cell.getNumericCellValue();
+                    }
+
+
                     // 小于
-                    if (!Double.isNaN(annoCell.valid().lt())) {
-                        if (!(cellValue < annoCell.valid().lt())) {
+                    if (!Double.isNaN(excelValid.lt())) {
+                        if (!(cellValue < excelValid.lt())) {
                             result =
-                                    MessageFormat.format("the column [{0}] value must less than [{1}]", localeHeaderName,
-                                            annoCell.valid().lt());
+                                    MessageFormat.format("the column [{0}] must less than [{1}]", localeHeaderName,
+                                            excelValid.lt());
                         }
                     }
                     // 大于
-                    if (!Double.isNaN(annoCell.valid().gt())) {
-                        if (!(cellValue > annoCell.valid().gt())) {
+                    if (!Double.isNaN(excelValid.gt())) {
+                        if (!(cellValue > excelValid.gt())) {
                             result =
-                                    MessageFormat.format("the column [{0}] value must greater than [{1}]", localeHeaderName,
-                                            annoCell.valid().gt());
+                                    MessageFormat.format("the column [{0}] must greater than [{1}]", localeHeaderName,
+                                            excelValid.gt());
                         }
                     }
                     // 小于等于
-                    if (!Double.isNaN(annoCell.valid().le())) {
-                        if (!(cellValue <= annoCell.valid().le())) {
+                    if (!Double.isNaN(excelValid.le())) {
+                        if (!(cellValue <= excelValid.le())) {
                             result =
-                                    MessageFormat.format("the column [{0}] value must less than or equal [{1}]",
-                                            localeHeaderName, annoCell.valid().le());
+                                    MessageFormat.format("the column [{0}] must less than or equal [{1}]",
+                                            localeHeaderName, excelValid.le());
                         }
                     }
                     // 大于等于
-                    if (!Double.isNaN(annoCell.valid().ge())) {
-                        if (!(cellValue >= annoCell.valid().ge())) {
+                    if (!Double.isNaN(excelValid.ge())) {
+                        if (!(cellValue >= excelValid.ge())) {
                             result =
-                                    MessageFormat.format("the column [{0}] value must greater than or equal [{1}]",
-                                            localeHeaderName, annoCell.valid().ge());
+                                    MessageFormat.format("the column [{0}] must greater than or equal [{1}]",
+                                            localeHeaderName, excelValid.ge());
                         }
                     }
                 }
             }
         }
         return result;
+    }
+
+    private static boolean matchNumber(String cellValueStr) {
+        Matcher nummMatcher = NUMBER_PATTERN.matcher(cellValueStr);
+        return nummMatcher.matches();
+    }
+
+    private static boolean allowBlankCell(Cell cell, ExcelCell.Valid excelValid) {
+        return (cell == null || cell.getCellTypeEnum() == CellType.BLANK) && excelValid.allowNull();
     }
 
 
@@ -763,20 +876,27 @@ public class ExcelUtil {
     private static List<FieldForSortting> sortFieldByAnno(Class<?> clazz) {
         Field[] fieldsArr = clazz.getDeclaredFields();
         List<FieldForSortting> fields = new ArrayList<>();
-        List<FieldForSortting> annoNullFields = new ArrayList<>();
         for (Field field : fieldsArr) {
             ExcelCell ec = field.getAnnotation(ExcelCell.class);
             if (ec == null) {
                 // 没有ExcelCell Annotation 视为不导入
                 continue;
             }
-            int id = ec.index();
+            int id = ec.exportIndex();
             fields.add(new FieldForSortting(field, id));
         }
-        fields.addAll(annoNullFields);
-        sortByProperties(fields, true, false, "index");
+        sortByProperties(fields, true, false, ExcelDefaultConstants.SORT_ANNO_PROPS);
         return fields;
     }
+
+    private static List<Field> getExcelCellField(Class<?> clazz) {
+        Field[] fieldsArr = clazz.getDeclaredFields();
+        if (ArrayUtils.isEmpty(fieldsArr)) {
+            return new ArrayList<>();
+        }
+        return Arrays.stream(fieldsArr).filter(f -> f.getAnnotation(ExcelCell.class) != null).collect(Collectors.toList());
+    }
+
 
     private static void sortByProperties(List<? extends Object> list, boolean isNullHigh,
                                          boolean isReversed, String... props) {
@@ -807,7 +927,6 @@ public class ExcelUtil {
 
     //校验cell为空或""的合法性
     private static boolean cellNullValid(Cell cell, boolean allowNull) {
-        return !isNullOrBlankStringCell(cell) || (isNullOrBlankStringCell(cell) && !allowNull);
+        return !isNullOrBlankStringCell(cell) || (isNullOrBlankStringCell(cell) && allowNull);
     }
-
 }
