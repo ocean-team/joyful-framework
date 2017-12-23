@@ -22,14 +22,17 @@ import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
+import org.apache.poi.ss.util.NumberToTextConverter;
 import org.joyful4j.modules.excel.annotation.ExcelCell;
 import org.joyful4j.modules.excel.annotation.ExcelConfig;
-import org.joyful4j.modules.excel.constants.ExcelDefaultConstants;
+import org.joyful4j.modules.excel.constants.ExcelDefaultConfig;
 import org.joyful4j.modules.excel.entity.CellTypeMode;
 import org.joyful4j.modules.excel.entity.ExcelI18nStrategyType;
 import org.joyful4j.modules.excel.entity.ExcelSheet;
 import org.joyful4j.modules.excel.entity.FieldForSortting;
+import org.joyful4j.modules.excel.exception.ExcelCanHandleException;
 import org.joyful4j.modules.excel.exception.ExcelException;
+import org.joyful4j.modules.excel.exception.ExcellExceptionType;
 import org.joyful4j.modules.excel.logs.ExcelLog;
 import org.joyful4j.modules.excel.logs.ExcelLogs;
 import org.joyful4j.modules.excel.logs.ExcelRowLog;
@@ -51,6 +54,7 @@ import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -76,12 +80,10 @@ public class ExcelUtil {
 
         String num1 = "20.1";
 
-        Matcher integerMatcher =  NUMBER_PATTERN.matcher(num1);
+        Matcher integerMatcher = NUMBER_PATTERN.matcher(num1);
         System.out.println(integerMatcher.matches());
 
         Double.parseDouble(num1);
-
-
 
 
     }
@@ -91,8 +93,8 @@ public class ExcelUtil {
      * 获取cell类型的文字描述
      *
      * @param cellType <pre>
-     *                                                                                                                                                                                 CellType.BLANK
-     *                 @return
+     *                                                                                                                                                                                                 CellType.BLANK
+     *                                 @return
      */
     private static String getCellTypeByInt(CellType cellType, CellTypeMode cellTypeMode) {
         switch (cellType) {
@@ -150,15 +152,22 @@ public class ExcelUtil {
             case FORMULA:
                 return cell.getCellFormula();
             case NUMERIC:
-                if (DateUtil.isCellDateFormatted(cell)) {
+                if (DateUtil.isCellDateFormatted(cell)) {// 判断是日期类型
                     return cell.getDateCellValue();
                 } else {
-                    double doubleVal = cell.getNumericCellValue();
+                    // 解决问题：
+                    // 1、科学计数法(如2.6E+10)，
+                    // 2、超长小数小数位不一致（如1091.19649281798读取出1091.1964928179796），
+                    // 3、整型变小数（如0读取出0.0）
+
+                    return NumberToTextConverter.toText(cell.getNumericCellValue());
+
+                    /*double doubleVal = cell.getNumericCellValue();
                     long longVal = Math.round(cell.getNumericCellValue());
                     if (Double.parseDouble(longVal + ".0") == doubleVal) {
                         return longVal;
                     }
-                    return doubleVal;
+                    return doubleVal;*/
                 }
 
             case STRING:
@@ -314,7 +323,7 @@ public class ExcelUtil {
                                         String datePattern) {
         //时间格式默认"yyyy-MM-dd"
         if (StringUtils.isEmpty(datePattern)) {
-            datePattern = ExcelDefaultConstants.DEFAULT_OUTPUT_DATE_PATTERN;
+            datePattern = ExcelDefaultConfig.DEFAULT_OUTPUT_DATE_PATTERN;
         }
         // 产生表格标题行
         HSSFRow row = sheet.createRow(0);
@@ -443,7 +452,9 @@ public class ExcelUtil {
      * 把Excel的数据封装成voList
      *
      * @param clazz        输出数据类型,支持 javabean.class 或 Map.class
-     * @param importHeader Map<String,List<String>> 输出类型为javaBean时，必须提供表头Map，key用于同javabean的字段对应
+     * @param importHeader Map<String,List<String>>
+     *                     输出类型为javaBean时，且多语言策略为ExcelI18nStrategyType.EXCEL_I18N_STRATEGY_NONE时，
+     *                     必须提供importHeader，key用于同javabean的字段对应
      * @param inputStream  excel输入流
      * @param pattern      如果有时间数据，设定输入格式。默认为"yyy-MM-dd"
      * @param logs         错误log集合
@@ -480,7 +491,7 @@ public class ExcelUtil {
                 continue;
             }
 
-            //输出数据类型是Map时，简单将数据封装为Map<headerName,i18nStrategy>
+            //输出数据类型是Map时，简单将数据封装为Map<headerName,value>
             if (clazz == Map.class) {
                 Map<String, Object> map = handleExcelRowToMap(fileHeaderIndexMap, row);
                 resultList.add((T) map);
@@ -509,6 +520,9 @@ public class ExcelUtil {
         }
 
         List<Field> excelCellFields = getExcelCellField(clazz);
+        //从传入的表头或者根据i18n策略获得的表头在Excel中对应的列的集合
+        List<Integer> configHeaderIndex = new ArrayList<>();
+
         for (Field field : excelCellFields) {
             String importHeaderKey = field.getAnnotation(ExcelCell.class).importHeaderKey();
             if (StringUtils.isBlank(importHeaderKey)) {
@@ -539,7 +553,7 @@ public class ExcelUtil {
                 continue;
             }
 
-            field.setAccessible(true);
+            configHeaderIndex.add(cellIndex);
             Cell cell = row.getCell(cellIndex);
             String errMsg = validateCell(cell, field, cellIndex, currentHeaderName);
             if (StringUtils.isNotBlank(errMsg)) {
@@ -549,7 +563,7 @@ public class ExcelUtil {
 
             Object excelValueObj = null;
             try {
-                excelValueObj = setExcelValueObj(field, pattern, excelValueObj, cell, excelConfig);
+                excelValueObj = getExcelValueObj(field, pattern, cell, excelConfig);
             } catch (ParseException e) {
                 errMsg = MessageFormat.format("the column [{0}] can not be converted to a date ", currentHeaderName);
                 appendToExcelRowLog(log, errMsg);
@@ -564,24 +578,97 @@ public class ExcelUtil {
                 continue;
             }
 
-            excelValueObj = convertToFieldValue(field.getType(), excelValueObj);
             try {
-                field.set(excelEntityVo, excelValueObj);
-            } catch (IllegalAccessException e) {
-                throw new ExcelException(MessageFormat.format("Can not set a value {0} for Object: {1} - field: {2}", excelValueObj, clazz.getSimpleName(), field.getName()), e);
+                excelValueObj = convertToFieldValue(field.getType(), excelValueObj);
+            } catch (NumberFormatException e) {
+                errMsg = MessageFormat.format("The column {0} has the wrong data type ", currentHeaderName);
+                appendToExcelRowLog(log, errMsg);
+                continue;
             }
+            setEntityFieldValue(clazz,excelEntityVo,field,excelValueObj);
         }
+
+        //处理弹性字段
+        handleFlexfieldData(clazz, fileHeaderIndexMap, row, excelEntityVo, excelCellFields, configHeaderIndex);
+
         return excelEntityVo;
     }
 
-    private static Object setExcelValueObj(Field field, String pattern, Object excelValueObj, Cell cell, ExcelConfig excelConfig) throws ParseException {
+    private static <T> void handleFlexfieldData(Class<T> clazz, Map<String, Integer> fileHeaderIndexMap, Row row, T excelEntityVo, List<Field> excelCellFields, List<Integer> configHeaderIndex) {
+        Field flexField = getFlexbleField(excelCellFields);
+        if (flexField != null) {
+            Map<Integer, String> flexFieldHeaderMap = new LinkedHashMap<>();
+
+            fileHeaderIndexMap.forEach((header, index) -> {
+                if (!configHeaderIndex.contains(index)) {
+                    String flexHeader = flexFieldHeaderMap.get(index);
+                    //存在重复表头
+                    if (flexHeader != null) {
+                        throw new ExcelCanHandleException(ExcellExceptionType.REPEATED_HEADER);
+                    }
+                    flexFieldHeaderMap.put(index, header);
+                }
+            });
+            //有序Map用来存放弹性字段
+            Map<String, Object> flexFieldDataMap = new LinkedHashMap<>();
+
+            if (MapUtils.isNotEmpty(flexFieldHeaderMap)) {
+                flexFieldHeaderMap.forEach((index, header) -> {
+                    Cell cell = row.getCell(index);
+                    // 判空
+                    addCellDataToMap(flexFieldDataMap, header, cell);
+                });
+                setEntityFieldValue(clazz, excelEntityVo, flexField, flexFieldDataMap);
+            }
+
+        }
+    }
+
+    private static <T> void setEntityFieldValue(Class<T> clazz, T excelEntityVo, Field flexField, Object fieldValue) {
+        flexField.setAccessible(true);
+        try {
+            flexField.set(excelEntityVo, fieldValue);
+        } catch (IllegalAccessException e) {
+            throw new ExcelException(MessageFormat.format("Can not set a value {0} for Object: {1} - field: {2}", fieldValue, clazz.getSimpleName(), flexField.getName()), e);
+        }
+    }
+
+    private static void addCellDataToMap(Map<String, Object> flexFieldDataMap, String header, Cell cell) {
+        if (cell == null) {
+            flexFieldDataMap.put(header, null);
+        } else {
+            //fixme 读取各种类型数据
+            cell.setCellType(CellType.STRING);
+            String value = cell.getStringCellValue();
+            flexFieldDataMap.put(header, value);
+        }
+    }
+
+    private static Field getFlexbleField(List<Field> excelCellFields) {
+        Field flexField = null;
+        List<Field> flexbleFields = excelCellFields.stream().filter(f -> f.getAnnotation(ExcelCell.class).flexibleField()).collect(Collectors.toList());
+        if (flexbleFields.size() > 1) {
+            throw new ExcelException("Each object can only have one flexible field，the current object has " + flexbleFields.size());
+        } else if (flexbleFields.size() == 1) {
+            flexField = flexbleFields.get(0);
+        }
+        return flexField;
+    }
+
+
+    private static Object getExcelValueObj(Field field, String pattern, Cell cell, ExcelConfig excelConfig) throws ParseException {
+        Object excelValueObj = null;
 
         // String类型的日期转换
         if (field.getType().equals(Date.class) && cell.getCellTypeEnum() == CellType.STRING) {
             Object strDate = getCellValue(cell, excelConfig);
 
+
             //fixme 时间格式处理
             excelValueObj = new SimpleDateFormat(pattern).parse(strDate.toString());
+
+
+
 
         } else {
             excelValueObj = getCellValue(cell, excelConfig);
@@ -600,14 +687,7 @@ public class ExcelUtil {
             Integer headerIndex = fileHeaderIndexMap.get(fileHeaderName);
             Cell cell = row.getCell(headerIndex);
             // 判空
-            if (cell == null) {
-                map.put(fileHeaderName, null);
-            } else {
-                //fixme 读取各种类型数据
-                cell.setCellType(CellType.STRING);
-                String value = cell.getStringCellValue();
-                map.put(fileHeaderName, value);
-            }
+            addCellDataToMap(map, fileHeaderName, cell);
         }
         return map;
     }
@@ -725,7 +805,9 @@ public class ExcelUtil {
             return Integer.parseInt(value.toString());
         } else if (Double.class == type) {
             return Double.parseDouble(value.toString());
-        } else if (String.class == type) {
+        } else if(Long.class == type){
+            return Long.parseLong(value.toString());
+        }else if (String.class == type) {
             return value.toString();
         }
         return value;
@@ -749,11 +831,11 @@ public class ExcelUtil {
 
         switch (cellTypeMode) {
            /* case STRICT:
-                cellTypeArr = ExcelDefaultConstants.strickValidateMap.get(field.getType());
+                cellTypeArr = ExcelDefaultConfig.strickValidateMap.get(field.getType());
                 break;*/
             case LOOSE:
             default:
-                cellTypeArr = ExcelDefaultConstants.looseValidateMap.get(field.getType());
+                cellTypeArr = ExcelDefaultConfig.looseValidateMap.get(field.getType());
                 break;
 
         }
@@ -808,13 +890,13 @@ public class ExcelUtil {
                     double cellValue = 0D;
                     if (cell.getCellTypeEnum() == CellType.STRING) {
                         String cellValueStr = cell.getStringCellValue();
-                        if(matchNumber(cellValueStr)){
+                        if (matchNumber(cellValueStr)) {
                             cellValue = Double.parseDouble(cellValueStr);
-                        }else{
+                        } else {
                             return result;
                         }
 
-                    }else{
+                    } else {
                         cellValue = cell.getNumericCellValue();
                     }
 
@@ -885,12 +967,18 @@ public class ExcelUtil {
             int id = ec.exportIndex();
             fields.add(new FieldForSortting(field, id));
         }
-        sortByProperties(fields, true, false, ExcelDefaultConstants.SORT_ANNO_PROPS);
+        sortByProperties(fields, true, false, ExcelDefaultConfig.SORT_ANNO_PROPS);
         return fields;
     }
 
     private static List<Field> getExcelCellField(Class<?> clazz) {
         Field[] fieldsArr = clazz.getDeclaredFields();
+
+        Class superClazz =  clazz.getSuperclass();
+        if (superClazz != null) {
+            Field[] superFieldsArr = superClazz.getDeclaredFields();
+            fieldsArr = ArrayUtils.addAll(fieldsArr, superFieldsArr);
+        }
         if (ArrayUtils.isEmpty(fieldsArr)) {
             return new ArrayList<>();
         }

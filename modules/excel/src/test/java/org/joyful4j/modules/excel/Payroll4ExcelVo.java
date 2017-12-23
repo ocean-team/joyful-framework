@@ -4,11 +4,12 @@ package org.joyful4j.modules.excel;
 import org.joyful4j.modules.excel.annotation.ExcelCell;
 import org.joyful4j.modules.excel.annotation.ExcelConfig;
 import org.joyful4j.modules.excel.entity.ExcelI18nStrategyType;
+import org.joyful4j.modules.excel.entity.AbstractFlexbleFieldExcel;
 
 import java.util.Date;
 
 @ExcelConfig(i18nStrategy = ExcelI18nStrategyType.EXCEL_I18N_STRATEGY_PROPS,propsFileName = "excel-i18n-demo.properties")
-public class Payroll4ExcelVo {
+public class Payroll4ExcelVo extends AbstractFlexbleFieldExcel {
 
     public static final String EXCEL_TEST_NAME = "excel_test_name";
     public static final String EXCEL_TEST_YEAR = "excel_test_year";
@@ -25,7 +26,7 @@ public class Payroll4ExcelVo {
 
     @ExcelCell(exportIndex = 1, importHeaderKey = EXCEL_TEST_YEAR, defaultHeaderName = "年")
     @ExcelCell.Valid(allowNull = false)
-    private Integer year;
+    private Long year;
 
 
     @ExcelCell(exportIndex = 2, importHeaderKey = EXCEL_TEST_MONTH, defaultHeaderName = "月")
@@ -46,10 +47,12 @@ public class Payroll4ExcelVo {
     private Date testTime;
 
 
+
+
     public Payroll4ExcelVo() {
     }
 
-    public Payroll4ExcelVo(String name, Integer year, Integer month, Double money, Double tax, Date payTime) {
+    public Payroll4ExcelVo(String name, Long year, Integer month, Double money, Double tax, Date payTime) {
         this.name = name;
         this.year = year;
         this.month = month;
@@ -66,11 +69,11 @@ public class Payroll4ExcelVo {
         this.name = name;
     }
 
-    public Integer getYear() {
+    public Long getYear() {
         return year;
     }
 
-    public void setYear(Integer year) {
+    public void setYear(Long year) {
         this.year = year;
     }
 
@@ -132,6 +135,7 @@ public class Payroll4ExcelVo {
                 ", tax=" + tax +
                 ", payTime=" + payTime +
                 ", testTime=" + testTime +
+                ", flexbleFields=" + flexbleFields +
                 '}';
     }
 }

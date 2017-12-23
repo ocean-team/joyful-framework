@@ -16,6 +16,6 @@ public enum CellTypeMode {
      * 松散模式下，class相关字段可能对应多种格式的Excel
      * eg：String类型的字段可以对应String，Number，Date 等类型的Excel单元格
      */
-    LOOSE;
+    LOOSE
 
 }

@@ -2,6 +2,7 @@ package org.joyful4j.modules.excel.annotation;
 
 
 import org.apache.commons.lang3.StringUtils;
+import org.joyful4j.modules.excel.ExcelUtil;
 import org.joyful4j.modules.excel.entity.CellTypeMode;
 
 import java.lang.annotation.ElementType;
@@ -28,14 +29,14 @@ public @interface ExcelCell {
      * 
      * @return index
      */
-    int exportIndex();
+    int exportIndex() default 999;
 
     /**
      * 导入表头key，对应表头Map的key用于与表头对应
      * @see {@link ExcelConfig#i18nStrategy()} 为 EXCEL_I18N_STRATEGY_PROPS时 可用于多语言词条key
      * @return header
      */
-    String importHeaderKey();
+    String importHeaderKey() default "";
 
     /**
      * 默认对应的表头名
@@ -60,11 +61,13 @@ public @interface ExcelCell {
     CellTypeMode cellTypeMode() default CellTypeMode.LOOSE;
 
     /**
-     * 用于验证
-     * 
-     * @return valid
+     * 是否弹性字段
+     * flexibleField为true的字段用来放所有那些Excel表头没有对应固定字段的数据
+     * 表注flexibleField为true的字段应该是有序的Map<表头，value>
+     * @return
      */
-    Valid valid() default @Valid();
+    boolean flexibleField() default false;
+
 
     /**
      * 除Valid之外的校验

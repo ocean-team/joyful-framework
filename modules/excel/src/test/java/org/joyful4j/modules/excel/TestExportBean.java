@@ -34,9 +34,9 @@ public class TestExportBean {
 
 
         Collection<Object> dataset=new ArrayList<Object>();
-        dataset.add(new Payroll4ExcelVo("张三",2017,12,1234.0,10.34,new Date()));
-        dataset.add(new Payroll4ExcelVo("李四",2017,10,1345.0,20.56,new Date()));
-        dataset.add(new Payroll4ExcelVo("李四",2017,11,null,20.56,new Date()));
+        dataset.add(new Payroll4ExcelVo("张三",2017L,12,1234.0,10.34,new Date()));
+        dataset.add(new Payroll4ExcelVo("李四",2017L,10,1345.0,20.56,new Date()));
+        dataset.add(new Payroll4ExcelVo("李四",2017L,11,null,20.56,new Date()));
         File f=new File("exportBean.xls");
         OutputStream out =new FileOutputStream(f);
         

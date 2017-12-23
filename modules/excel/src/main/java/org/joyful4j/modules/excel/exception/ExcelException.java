@@ -1,6 +1,11 @@
 package org.joyful4j.modules.excel.exception;
 
+/**
+ * @author richey
+ */
 public class ExcelException extends RuntimeException {
+
+    private static final long serialVersionUID = -3469867174279134372L;
 
     public ExcelException() {
         super();
@@ -17,5 +22,6 @@ public class ExcelException extends RuntimeException {
     public ExcelException(String message, Throwable cause) {
         super(message,cause);
     }
+
 
 }

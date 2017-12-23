@@ -6,7 +6,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 
-public class ExcelDefaultConstants {
+public class ExcelDefaultConfig {
 
     //日期类型默认输出格式
     public static final String DEFAULT_OUTPUT_DATE_PATTERN = "yyyy-MM-dd";
@@ -47,5 +47,9 @@ public class ExcelDefaultConstants {
         strickValidateMap.put(Long.class, new CellType[]{CellType.NUMERIC});
         strickValidateMap.put(Boolean.class, new CellType[]{CellType.BOOLEAN});*/
     }
+
+
+
+
 
 }
