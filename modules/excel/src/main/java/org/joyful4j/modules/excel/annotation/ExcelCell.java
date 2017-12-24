@@ -32,11 +32,13 @@ public @interface ExcelCell {
     int exportIndex() default 999;
 
     /**
-     * 导入表头key，对应表头Map的key用于与表头对应
+     * 表头key，
+     * 对应表头Map的key用于与表头对应
+     *
      * @see {@link ExcelConfig#i18nStrategy()} 为 EXCEL_I18N_STRATEGY_PROPS时 可用于多语言词条key
      * @return header
      */
-    String importHeaderKey() default "";
+    String headerKey() default "";
 
     /**
      * 默认对应的表头名

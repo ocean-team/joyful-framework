@@ -1,5 +1,8 @@
 package org.joyful4j.modules.excel;
 
+import org.apache.commons.collections.map.HashedMap;
+import org.joyful4j.modules.excel.cellstyle.ExcelCellStyle;
+import org.joyful4j.modules.excel.cellstyle.ExcelCellStyleFactory;
 import org.junit.Test;
 
 import java.io.File;
@@ -14,10 +17,6 @@ import java.util.Map;
 
 public class TestExportBean {
 
-
-
-
-
     @Test
     public void exportXls() throws IOException {
         /**
@@ -25,13 +24,17 @@ public class TestExportBean {
          * 导出的数据顺序
          */
         Map<String,String> headerMap = new LinkedHashMap<>();
-        headerMap.put("name", "姓名");
-        headerMap.put("year", "年");
-        headerMap.put("month", "月");
-        headerMap.put("salary", "薪资");
-        headerMap.put("tax", "税额");
-        headerMap.put("excel_test_payTime", "支付时间");
+        headerMap.put(Payroll4ExcelVo.EXCEL_TEST_NAME, "姓名");
+        headerMap.put(Payroll4ExcelVo.EXCEL_TEST_YEAR, "年");
+        headerMap.put(Payroll4ExcelVo.EXCEL_TEST_MONTH, "月");
+        headerMap.put(Payroll4ExcelVo.EXCEL_TEST_SALARY, "薪资");
+        headerMap.put(Payroll4ExcelVo.EXCEL_TEST_TAX, "税额");
+        headerMap.put(Payroll4ExcelVo.EXCEL_TEST_PAYTIME, "支付时间");
 
+        ExcelCellStyle requiredStyle = ExcelCellStyleFactory.createRequiredHeaderCellStyle();
+
+        Map<String, ExcelCellStyle> headerStyleMap = new HashedMap();
+        headerStyleMap.put(Payroll4ExcelVo.EXCEL_TEST_NAME, requiredStyle);
 
         Collection<Object> dataset=new ArrayList<Object>();
         dataset.add(new Payroll4ExcelVo("张三",2017L,12,1234.0,10.34,new Date()));
@@ -39,8 +42,9 @@ public class TestExportBean {
         dataset.add(new Payroll4ExcelVo("李四",2017L,11,null,20.56,new Date()));
         File f=new File("exportBean.xls");
         OutputStream out =new FileOutputStream(f);
-        
-        ExcelUtil.exportExcel(headerMap, dataset, out);
+
+
+        ExcelUtil.exportExcel(headerMap, dataset,headerStyleMap ,out);
         out.close();
     }
 }

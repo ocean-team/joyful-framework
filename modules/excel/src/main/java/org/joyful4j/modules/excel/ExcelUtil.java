@@ -6,6 +6,7 @@ import org.apache.commons.collections.ComparatorUtils;
 import org.apache.commons.collections.MapUtils;
 import org.apache.commons.collections.comparators.ComparableComparator;
 import org.apache.commons.collections.comparators.ComparatorChain;
+import org.apache.commons.collections.map.HashedMap;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.poi.EncryptedDocumentException;
@@ -16,8 +17,10 @@ import org.apache.poi.hssf.usermodel.HSSFSheet;
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 import org.apache.poi.openxml4j.exceptions.InvalidFormatException;
 import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
 import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.DateUtil;
+import org.apache.poi.ss.usermodel.Font;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
@@ -25,11 +28,12 @@ import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.apache.poi.ss.util.NumberToTextConverter;
 import org.joyful4j.modules.excel.annotation.ExcelCell;
 import org.joyful4j.modules.excel.annotation.ExcelConfig;
+import org.joyful4j.modules.excel.cellstyle.ExcelCellStyle;
+import org.joyful4j.modules.excel.cellstyle.ExcelFont;
 import org.joyful4j.modules.excel.constants.ExcelDefaultConfig;
 import org.joyful4j.modules.excel.entity.CellTypeMode;
 import org.joyful4j.modules.excel.entity.ExcelI18nStrategyType;
 import org.joyful4j.modules.excel.entity.ExcelSheet;
-import org.joyful4j.modules.excel.entity.FieldForSortting;
 import org.joyful4j.modules.excel.exception.ExcelCanHandleException;
 import org.joyful4j.modules.excel.exception.ExcelException;
 import org.joyful4j.modules.excel.exception.ExcellExceptionType;
@@ -43,6 +47,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.Field;
+import java.sql.Timestamp;
 import java.text.MessageFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -57,7 +62,6 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -76,125 +80,6 @@ public class ExcelUtil {
     private static final Pattern NUMBER_PATTERN = Pattern.compile("[1-9]+[0-9]*(\\.[0-9]+)*");
 
 
-    public static void main(String[] args) {
-
-        String num1 = "20.1";
-
-        Matcher integerMatcher = NUMBER_PATTERN.matcher(num1);
-        System.out.println(integerMatcher.matches());
-
-        Double.parseDouble(num1);
-
-
-    }
-
-
-    /**
-     * 获取cell类型的文字描述
-     *
-     * @param cellType <pre>
-     *                                                                                                                                                                                                 CellType.BLANK
-     *                                 @return
-     */
-    private static String getCellTypeByInt(CellType cellType, CellTypeMode cellTypeMode) {
-        switch (cellType) {
-            case BLANK:
-                return "Null type";
-            case BOOLEAN:
-                return "Boolean type";
-            case ERROR:
-                return "Error type";
-            case FORMULA:
-                return "Formula type";
-            case NUMERIC:
-                switch (cellTypeMode) {
-                    /*case STRICT:
-                        return "Numeric type ";*/
-                    case LOOSE:
-                    default:
-                        return "Numeric type or String type or Date type";
-                }
-            case STRING:
-                switch (cellTypeMode) {
-                    /*case STRICT:
-                        return "String type or Null type";*/
-                    case LOOSE:
-                    default:
-                        return "String type or Numeric type or String type or Date type";
-                }
-
-            default:
-                return "Unknown type";
-        }
-    }
-
-    /**
-     * 获取单元格值
-     *
-     * @param cell
-     * @param excelConfig
-     * @return
-     */
-    private static Object getCellValue(Cell cell, ExcelConfig excelConfig) {
-
-        if (isNullOrBlankStringCell(cell)) {
-            return null;
-        }
-
-        CellType cellType = cell.getCellTypeEnum();
-        switch (cellType) {
-            case BLANK:
-                return null;
-            case BOOLEAN:
-                return cell.getBooleanCellValue();
-            case ERROR:
-                return cell.getErrorCellValue();
-            case FORMULA:
-                return cell.getCellFormula();
-            case NUMERIC:
-                if (DateUtil.isCellDateFormatted(cell)) {// 判断是日期类型
-                    return cell.getDateCellValue();
-                } else {
-                    // 解决问题：
-                    // 1、科学计数法(如2.6E+10)，
-                    // 2、超长小数小数位不一致（如1091.19649281798读取出1091.1964928179796），
-                    // 3、整型变小数（如0读取出0.0）
-
-                    return NumberToTextConverter.toText(cell.getNumericCellValue());
-
-                    /*double doubleVal = cell.getNumericCellValue();
-                    long longVal = Math.round(cell.getNumericCellValue());
-                    if (Double.parseDouble(longVal + ".0") == doubleVal) {
-                        return longVal;
-                    }
-                    return doubleVal;*/
-                }
-
-            case STRING:
-                String cellValue = cell.getStringCellValue();
-                if (StringUtils.isNotBlank(cellValue) && excelConfig != null && StringUtils.isNotEmpty(excelConfig.globalRemovePattern())) {
-                    cellValue.trim();
-                    cellValue.replaceAll(excelConfig.globalRemovePattern(), "");
-                }
-                return cellValue;
-            default:
-                return null;
-        }
-    }
-
-
-    /**
-     * Cell是null 或是CellType.STRING类型的，但是值是blank的
-     *
-     * @param cell
-     * @return
-     */
-    private static boolean isNullOrBlankStringCell(Cell cell) {
-        return cell == null
-                || cell.getCellTypeEnum() == CellType.BLANK
-                || (cell.getCellTypeEnum() == CellType.STRING && StringUtils.isBlank(cell.getStringCellValue()));
-    }
-
     /**
      * 单个sheet导出
      * 导出数据可以是：
@@ -209,8 +94,8 @@ public class ExcelUtil {
      *                支持的javabean属性的数据类型有基本数据类型及String,Date,String[],Double[]
      * @param out
      */
-    public static <T> void exportExcel(Map<String, String> headers, Collection<T> dataset, OutputStream out) {
-        exportExcel(headers, dataset, out, null);
+    public static <T> void exportExcel(Map<String, String> headers, Collection<T> dataset, Map<String, ExcelCellStyle> headerStyleMap, OutputStream out) {
+        exportExcel(headers, dataset, headerStyleMap, out, null);
     }
 
     /**
@@ -224,12 +109,12 @@ public class ExcelUtil {
      * @param out         与输出设备关联的流对象，可以将EXCEL文档导出到本地文件或者网络中
      * @param datePattern 如果有时间数据，设定输出格式。默认为"yyy-MM-dd"
      */
-    public static <T> void exportExcel(Map<String, String> headers, Collection<T> dataset, OutputStream out,
+    public static <T> void exportExcel(Map<String, String> headers, Collection<T> dataset, Map<String, ExcelCellStyle> headerStyleMap, OutputStream out,
                                        String datePattern) {
         try (HSSFWorkbook workbook = new HSSFWorkbook()) {
             // 生成一个表格
             HSSFSheet sheet = workbook.createSheet();
-            write2Sheet(sheet, headers, dataset, datePattern);
+            write2Sheet(sheet, headers, dataset, headerStyleMap, datePattern, workbook);
             workbook.write(out);
         } catch (IOException e) {
             logger.error(e.toString(), e);
@@ -281,8 +166,8 @@ public class ExcelUtil {
      * @param sheets {@link ExcelSheet}的集合
      * @param out    与输出设备关联的流对象
      */
-    public static <T> void exportExcel(List<ExcelSheet<T>> sheets, OutputStream out) {
-        exportExcel(sheets, out, null);
+    public static <T> void exportExcel(List<ExcelSheet<T>> sheets, Map<String, ExcelCellStyle> headerStyleMap, OutputStream out) {
+        exportExcel(sheets, headerStyleMap, out, null);
     }
 
     /**
@@ -294,7 +179,7 @@ public class ExcelUtil {
      * @param out         与输出设备关联的流对象
      * @param datePattern 如果有时间数据，设定输出格式。默认为"yyy-MM-dd"
      */
-    public static <T> void exportExcel(List<ExcelSheet<T>> sheets, OutputStream out, String datePattern) {
+    public static <T> void exportExcel(List<ExcelSheet<T>> sheets, Map<String, ExcelCellStyle> headerStyleMap, OutputStream out, String datePattern) {
         if (CollectionUtils.isEmpty(sheets)) {
             return;
         }
@@ -303,149 +188,12 @@ public class ExcelUtil {
             for (ExcelSheet<T> sheet : sheets) {
                 // 生成一个表格
                 HSSFSheet hssfSheet = workbook.createSheet(sheet.getSheetName());
-                write2Sheet(hssfSheet, sheet.getHeaders(), sheet.getDataset(), datePattern);
+                write2Sheet(hssfSheet, sheet.getHeaders(), sheet.getDataset(), headerStyleMap, datePattern, workbook);
             }
             workbook.write(out);
         } catch (IOException e) {
             logger.error(e.toString(), e);
         }
-    }
-
-    /**
-     * 每个sheet的写入
-     *
-     * @param sheet       页签
-     * @param headers     表头
-     * @param dataset     数据集合
-     * @param datePattern 日期格式
-     */
-    private static <T> void write2Sheet(HSSFSheet sheet, Map<String, String> headers, Collection<T> dataset,
-                                        String datePattern) {
-        //时间格式默认"yyyy-MM-dd"
-        if (StringUtils.isEmpty(datePattern)) {
-            datePattern = ExcelDefaultConfig.DEFAULT_OUTPUT_DATE_PATTERN;
-        }
-        // 产生表格标题行
-        HSSFRow row = sheet.createRow(0);
-        // 标题行转中文
-        Set<String> headerKeys = headers.keySet();
-        Iterator<String> it1 = headerKeys.iterator();
-        //存放临时键变量
-        String key = "";
-        //标题列数
-        int c = 0;
-        while (it1.hasNext()) {
-            key = it1.next();
-            HSSFCell cell = row.createCell(c);
-            HSSFRichTextString text = new HSSFRichTextString(headers.get(key));
-            cell.setCellValue(text);
-            c++;
-        }
-
-        // 遍历集合数据，产生数据行
-        Iterator<T> it = dataset.iterator();
-        int index = 0;
-        while (it.hasNext()) {
-            index++;
-            row = sheet.createRow(index);
-            T t = it.next();
-            try {
-                if (t instanceof Map) {
-                    @SuppressWarnings("unchecked")
-                    Map<String, Object> map = (Map<String, Object>) t;
-                    int cellNum = 0;
-                    //遍历列名
-                    Iterator<String> it2 = headerKeys.iterator();
-                    while (it2.hasNext()) {
-                        key = it2.next();
-                        Object value = map.get(key);
-                        HSSFCell cell = row.createCell(cellNum);
-                        cellNum = setCellValue(cell, value, datePattern, cellNum, null, row);
-                        cellNum++;
-                    }
-                } else {
-                    List<FieldForSortting> fields = sortFieldByAnno(t.getClass());
-                    int cellNum = 0;
-                    for (int i = 0; i < fields.size(); i++) {
-                        HSSFCell cell = row.createCell(cellNum);
-                        Field field = fields.get(i).getField();
-                        field.setAccessible(true);
-                        Object value = field.get(t);
-                        cellNum = setCellValue(cell, value, datePattern, cellNum, field, row);
-                        cellNum++;
-                    }
-                }
-            } catch (Exception e) {
-                logger.error(e.toString(), e);
-            }
-        }
-        // 设定自动宽度
-        for (int i = 0; i < headers.size(); i++) {
-            sheet.autoSizeColumn(i);
-        }
-    }
-
-    private static int setCellValue(HSSFCell cell, Object value, String pattern, int cellNum, Field field, HSSFRow row) {
-        String textValue = null;
-        if (value instanceof Integer) {
-            int intValue = (Integer) value;
-            cell.setCellValue(intValue);
-        } else if (value instanceof Float) {
-            float fValue = (Float) value;
-            cell.setCellValue(fValue);
-        } else if (value instanceof Double) {
-            double dValue = (Double) value;
-            cell.setCellValue(dValue);
-        } else if (value instanceof Long) {
-            long longValue = (Long) value;
-            cell.setCellValue(longValue);
-        } else if (value instanceof Boolean) {
-            boolean bValue = (Boolean) value;
-            cell.setCellValue(bValue);
-        } else if (value instanceof Date) {
-            Date date = (Date) value;
-            SimpleDateFormat sdf = new SimpleDateFormat(pattern);
-            textValue = sdf.format(date);
-        } else if (value instanceof String[]) {
-            String[] strArr = (String[]) value;
-            for (int j = 0; j < strArr.length; j++) {
-                String str = strArr[j];
-                cell.setCellValue(str);
-                if (j != strArr.length - 1) {
-                    cellNum++;
-                    cell = row.createCell(cellNum);
-                }
-            }
-        } else if (value instanceof Double[]) {
-            Double[] douArr = (Double[]) value;
-            for (int j = 0; j < douArr.length; j++) {
-                Double val = douArr[j];
-                // 值不为空则set Value
-                if (val != null) {
-                    cell.setCellValue(val);
-                }
-
-                if (j != douArr.length - 1) {
-                    cellNum++;
-                    cell = row.createCell(cellNum);
-                }
-            }
-        } else {
-            // 其它数据类型都当作字符串简单处理
-            String defaultStr = StringUtils.EMPTY;
-            if (field != null) {
-                ExcelCell anno = field.getAnnotation(ExcelCell.class);
-                if (anno != null) {
-                    defaultStr = anno.defaultValue();
-                }
-            }
-            textValue = value == null ? defaultStr : value.toString();
-        }
-        if (textValue != null) {
-            HSSFRichTextString richString = new HSSFRichTextString(textValue);
-            cell.setCellValue(richString);
-        }
-        return cellNum;
     }
 
     /**
@@ -456,13 +204,12 @@ public class ExcelUtil {
      *                     输出类型为javaBean时，且多语言策略为ExcelI18nStrategyType.EXCEL_I18N_STRATEGY_NONE时，
      *                     必须提供importHeader，key用于同javabean的字段对应
      * @param inputStream  excel输入流
-     * @param pattern      如果有时间数据，设定输入格式。默认为"yyy-MM-dd"
      * @param logs         错误log集合
      * @return voList
      * @throws RuntimeException
      */
     public static <T> Collection<T> importExcel(Class<T> clazz, Map<String, List<String>> importHeader, InputStream inputStream,
-                                                String pattern, ExcelLogs logs) {
+                                                ExcelLogs logs) {
 
         Sheet sheet = getSheetFromWorkbook(inputStream, logs);
         if (sheet == null) {
@@ -497,7 +244,7 @@ public class ExcelUtil {
                 resultList.add((T) map);
             } else {
 
-                T excelEntityVo = handleExcelRowToJavabean(clazz, importHeader, pattern, excelConfig, fileHeaderIndexMap, log, row);
+                T excelEntityVo = handleExcelRowToJavabean(clazz, importHeader, excelConfig, fileHeaderIndexMap, log, row);
                 if (StringUtils.isBlank(log.toString())) {
                     resultList.add(excelEntityVo);
                 } else {
@@ -510,7 +257,7 @@ public class ExcelUtil {
         return resultList;
     }
 
-    private static <T> T handleExcelRowToJavabean(Class<T> clazz, Map<String, List<String>> importHeader, String pattern, ExcelConfig excelConfig, Map<String, Integer> fileHeaderIndexMap, StringBuilder log, Row row) {
+    private static <T> T handleExcelRowToJavabean(Class<T> clazz, Map<String, List<String>> importHeader, ExcelConfig excelConfig, Map<String, Integer> fileHeaderIndexMap, StringBuilder log, Row row) {
 
         T excelEntityVo = null;
         try {
@@ -524,7 +271,7 @@ public class ExcelUtil {
         List<Integer> configHeaderIndex = new ArrayList<>();
 
         for (Field field : excelCellFields) {
-            String importHeaderKey = field.getAnnotation(ExcelCell.class).importHeaderKey();
+            String importHeaderKey = field.getAnnotation(ExcelCell.class).headerKey();
             if (StringUtils.isBlank(importHeaderKey)) {
                 //未指定表头key，无法确定对应表头
                 continue;
@@ -563,7 +310,7 @@ public class ExcelUtil {
 
             Object excelValueObj = null;
             try {
-                excelValueObj = getExcelValueObj(field, pattern, cell, excelConfig);
+                excelValueObj = getExcelValueObj(field, cell, excelConfig);
             } catch (ParseException e) {
                 errMsg = MessageFormat.format("the column [{0}] can not be converted to a date ", currentHeaderName);
                 appendToExcelRowLog(log, errMsg);
@@ -585,7 +332,7 @@ public class ExcelUtil {
                 appendToExcelRowLog(log, errMsg);
                 continue;
             }
-            setEntityFieldValue(clazz,excelEntityVo,field,excelValueObj);
+            setEntityFieldValue(clazz, excelEntityVo, field, excelValueObj);
         }
 
         //处理弹性字段
@@ -637,9 +384,7 @@ public class ExcelUtil {
         if (cell == null) {
             flexFieldDataMap.put(header, null);
         } else {
-            //fixme 读取各种类型数据
-            cell.setCellType(CellType.STRING);
-            String value = cell.getStringCellValue();
+            Object value = getCellValue(cell, null);
             flexFieldDataMap.put(header, value);
         }
     }
@@ -655,21 +400,16 @@ public class ExcelUtil {
         return flexField;
     }
 
-
-    private static Object getExcelValueObj(Field field, String pattern, Cell cell, ExcelConfig excelConfig) throws ParseException {
+    private static Object getExcelValueObj(Field field, Cell cell, ExcelConfig excelConfig) throws ParseException {
         Object excelValueObj = null;
 
         // String类型的日期转换
         if (field.getType().equals(Date.class) && cell.getCellTypeEnum() == CellType.STRING) {
             Object strDate = getCellValue(cell, excelConfig);
-
-
-            //fixme 时间格式处理
-            excelValueObj = new SimpleDateFormat(pattern).parse(strDate.toString());
-
-
-
-
+            excelValueObj = ExcelDateParser.getDate(String.valueOf(strDate));
+        } else if (field.getType().equals(Timestamp.class) && cell.getCellTypeEnum() == CellType.STRING) {
+            Object strDate = getCellValue(cell, excelConfig);
+            excelValueObj = ExcelDateParser.getTimestamp(String.valueOf(strDate));
         } else {
             excelValueObj = getCellValue(cell, excelConfig);
             // 处理特殊情况,excel的value为String,且bean中为其他,且defaultValue不为空,那就=defaultValue
@@ -738,7 +478,7 @@ public class ExcelUtil {
                         try {
                             i18nHeaders = CatcheExcelI18nProps.getI18SortedHeaders(importHeaderKey, propsFileName);
                         } catch (ExecutionException e) {
-                            logger.error("根据词条key从配置文件中获取表头时失败，importHeaderKey：" + importHeaderKey + ",propsFileName:" + propsFileName + e.getStackTrace());
+                            logger.error("根据词条key从配置文件中获取表头时失败，headerKey：" + importHeaderKey + ",propsFileName:" + propsFileName + e.getStackTrace());
                             throw new ExcelException("Error reading Excel configuration file");
                         }
                     }
@@ -792,7 +532,6 @@ public class ExcelUtil {
         log.append(";");
     }
 
-
     /**
      * 根据类型处理value值
      * 读取Excel时数值类型被处理为long或double类型，所以映射成实体属性的时候要进行相应的处理
@@ -805,9 +544,9 @@ public class ExcelUtil {
             return Integer.parseInt(value.toString());
         } else if (Double.class == type) {
             return Double.parseDouble(value.toString());
-        } else if(Long.class == type){
+        } else if (Long.class == type) {
             return Long.parseLong(value.toString());
-        }else if (String.class == type) {
+        } else if (String.class == type) {
             return value.toString();
         }
         return value;
@@ -949,32 +688,10 @@ public class ExcelUtil {
     }
 
 
-    /**
-     * 根据annotation的seq排序后的栏位
-     *
-     * @param clazz
-     * @return
-     */
-    private static List<FieldForSortting> sortFieldByAnno(Class<?> clazz) {
-        Field[] fieldsArr = clazz.getDeclaredFields();
-        List<FieldForSortting> fields = new ArrayList<>();
-        for (Field field : fieldsArr) {
-            ExcelCell ec = field.getAnnotation(ExcelCell.class);
-            if (ec == null) {
-                // 没有ExcelCell Annotation 视为不导入
-                continue;
-            }
-            int id = ec.exportIndex();
-            fields.add(new FieldForSortting(field, id));
-        }
-        sortByProperties(fields, true, false, ExcelDefaultConfig.SORT_ANNO_PROPS);
-        return fields;
-    }
-
     private static List<Field> getExcelCellField(Class<?> clazz) {
         Field[] fieldsArr = clazz.getDeclaredFields();
 
-        Class superClazz =  clazz.getSuperclass();
+        Class superClazz = clazz.getSuperclass();
         if (superClazz != null) {
             Field[] superFieldsArr = superClazz.getDeclaredFields();
             fieldsArr = ArrayUtils.addAll(fieldsArr, superFieldsArr);
@@ -1017,4 +734,291 @@ public class ExcelUtil {
     private static boolean cellNullValid(Cell cell, boolean allowNull) {
         return !isNullOrBlankStringCell(cell) || (isNullOrBlankStringCell(cell) && allowNull);
     }
+
+    /**
+     * 获取cell类型的文字描述
+     *
+     * @param cellType <pre>
+     *                                                                                                                                                                                                                                                                                                 CellType.BLANK
+     *                                                                                                                                 @return
+     */
+    private static String getCellTypeByInt(CellType cellType, CellTypeMode cellTypeMode) {
+        switch (cellType) {
+            case BLANK:
+                return "Null type";
+            case BOOLEAN:
+                return "Boolean type";
+            case ERROR:
+                return "Error type";
+            case FORMULA:
+                return "Formula type";
+            case NUMERIC:
+                /*switch (cellTypeMode) {
+                    *//*case STRICT:
+                        return "Numeric type ";*//*
+                    case LOOSE:default:
+                        return "Numeric type or String type or Date type";
+                }*/
+                return "Numeric type or String type or Date type";
+            case STRING:
+                /*switch (cellTypeMode) {
+                    *//*case STRICT:
+                        return "String type or Null type";*//*
+                    case LOOSE:
+                    default:
+                        return "String type or Numeric type or String type or Date type";
+                }*/
+                return "String type or Numeric type or String type or Date type";
+
+
+            default:
+                return "Unknown type";
+        }
+    }
+
+    /**
+     * 获取单元格值
+     *
+     * @param cell
+     * @param excelConfig
+     * @return
+     */
+    private static Object getCellValue(Cell cell, ExcelConfig excelConfig) {
+
+        if (isNullOrBlankStringCell(cell)) {
+            return null;
+        }
+
+        CellType cellType = cell.getCellTypeEnum();
+        switch (cellType) {
+            case BLANK:
+                return null;
+            case BOOLEAN:
+                return cell.getBooleanCellValue();
+            case ERROR:
+                return cell.getErrorCellValue();
+            case FORMULA:
+                return cell.getCellFormula();
+            case NUMERIC:
+                if (DateUtil.isCellDateFormatted(cell)) {// 判断是日期类型
+                    return cell.getDateCellValue();
+                } else {
+                    // 解决问题：
+                    // 1、科学计数法(如2.6E+10)，
+                    // 2、超长小数小数位不一致（如1091.19649281798读取出1091.1964928179796），
+                    // 3、整型变小数（如0读取出0.0）
+
+                    return NumberToTextConverter.toText(cell.getNumericCellValue());
+
+                    /*double doubleVal = cell.getNumericCellValue();
+                    long longVal = Math.round(cell.getNumericCellValue());
+                    if (Double.parseDouble(longVal + ".0") == doubleVal) {
+                        return longVal;
+                    }
+                    return doubleVal;*/
+                }
+
+            case STRING:
+                String cellValue = cell.getStringCellValue();
+                if (StringUtils.isNotBlank(cellValue) && excelConfig != null && StringUtils.isNotEmpty(excelConfig.globalRemovePattern())) {
+                    cellValue = cellValue.trim().replaceAll(excelConfig.globalRemovePattern(), "");
+                }
+                return cellValue;
+            default:
+                return null;
+        }
+    }
+
+    /**
+     * Cell是null 或是CellType.STRING类型的，但是值是blank的
+     *
+     * @param cell
+     * @return
+     */
+    private static boolean isNullOrBlankStringCell(Cell cell) {
+        return cell == null
+                || cell.getCellTypeEnum() == CellType.BLANK
+                || (cell.getCellTypeEnum() == CellType.STRING && StringUtils.isBlank(cell.getStringCellValue()));
+    }
+
+    /**
+     * 每个sheet的写入
+     *
+     * @param sheet       页签
+     * @param headers     表头
+     * @param datas       数据集合
+     * @param datePattern 日期格式
+     * @param workbook
+     */
+    private static <T> void write2Sheet(HSSFSheet sheet, Map<String, String> headers, Collection<T> datas, Map<String, ExcelCellStyle> headerStyleMap,
+                                        String datePattern, HSSFWorkbook workbook) {
+        //时间格式默认"yyyy-MM-dd"
+        if (StringUtils.isEmpty(datePattern)) {
+            datePattern = ExcelDefaultConfig.DEFAULT_OUTPUT_DATE_PATTERN;
+        }
+        // 产生表格标题行
+        HSSFRow row = sheet.createRow(0);
+        // 标题行转中文 headers是有序的map，产生的keySet也是有序的
+        List<String> headerKeys = new ArrayList<>(headers.keySet());
+        Map<String, Font> fontMap = new HashedMap();
+        for (int i = 0; i < headerKeys.size(); i++) {
+            HSSFCell cell = row.createCell(i);
+            HSSFRichTextString text = new HSSFRichTextString(headers.get(headerKeys.get(i)));
+            cell.setCellValue(text);
+            ExcelCellStyle cellStyle = headerStyleMap.get(headerKeys.get(i));
+            if (cellStyle != null) {
+                CellStyle poiCellStyle = setExcelCellStyle(cellStyle, workbook, fontMap);
+                cell.setCellStyle(poiCellStyle);
+            }
+        }
+
+
+        // 遍历集合数据，产生数据行
+        Iterator<T> datasIt = datas.iterator();
+        int index = 0;
+        while (datasIt.hasNext()) {
+            index++;
+            row = sheet.createRow(index);
+            T rowData = datasIt.next();
+            try {
+                if (rowData instanceof List) {
+                    @SuppressWarnings("unchecked")
+                    List<Object> cellDatas = (List<Object>) rowData;
+                    int cellNum = 0;
+                    //遍历列名
+                    for (int i = 0; i < cellDatas.size(); i++) {
+                        HSSFCell cell = row.createCell(i);
+                        setCellValue(cell, cellDatas.get(i), datePattern, null, row);
+                    }
+
+                } else {
+                    List<Field> fields = getExcelCellField(rowData.getClass());
+                    Map<String, Field> fieldsMap = new HashedMap();
+                    fields.forEach(field -> {
+                        String headerKey = field.getAnnotation(ExcelCell.class).headerKey();
+                        if (StringUtils.isNotBlank(headerKey)) {
+                            fieldsMap.put(headerKey, field);
+                        }
+                    });
+                    for (int i = 0; i < headerKeys.size(); i++) {
+                        HSSFCell cell = row.createCell(i);
+                        Field field = fieldsMap.get(headerKeys.get(i));
+                        field.setAccessible(true);
+                        Object value = field.get(rowData);
+                        setCellValue(cell, value, datePattern, field, row);
+                    }
+                }
+            } catch (Exception e) {
+                logger.error(e.toString(), e);
+            }
+        }
+        // 设定自动宽度
+        for (int i = 0; i < headers.size(); i++) {
+            sheet.autoSizeColumn(i);
+        }
+    }
+
+    private static CellStyle setExcelCellStyle(ExcelCellStyle cellStyle, HSSFWorkbook workbook, Map<String, Font> fontMap) {
+        CellStyle poiCellStyle = workbook.createCellStyle();
+        poiCellStyle.setFillForegroundColor(cellStyle.getForegroundColor());
+        poiCellStyle.setFillBackgroundColor(cellStyle.getBackgroundColor());
+        poiCellStyle.setFillPattern(cellStyle.getFillPattern());
+        poiCellStyle.setBorderBottom(cellStyle.getBorderBottom());
+        poiCellStyle.setBorderLeft(cellStyle.getBorderLeft());
+        poiCellStyle.setBorderTop(cellStyle.getBorderTop());
+        poiCellStyle.setBorderRight(cellStyle.getBorderRight());
+        poiCellStyle.setAlignment(cellStyle.getHorizontalAlignment());
+        ExcelFont excelFont = cellStyle.getExcelFont();
+        if (excelFont != null) {
+            String fontUuid = excelFont.getUuid();
+            Font poiFont = fontMap.get(fontUuid);
+            if (poiFont == null) {
+                poiFont = workbook.createFont();
+                if (StringUtils.isNotBlank(excelFont.getFontName())) {
+                    poiFont.setFontName(excelFont.getFontName());
+                }
+                if (excelFont.getFontHeightInPoints() > 0) {
+                    poiFont.setFontHeightInPoints(excelFont.getFontHeightInPoints());
+                }
+                poiFont.setItalic(excelFont.getItalic());
+                if (excelFont.getColor() > 0) {
+                    poiFont.setColor(excelFont.getColor());
+                }
+                if (excelFont.getUnderline() > 0) {
+                    poiFont.setUnderline(excelFont.getUnderline());
+                }
+                poiFont.setBold(excelFont.getBold());
+                poiFont.setStrikeout(excelFont.getStrikeout());
+                fontMap.put(fontUuid, poiFont);
+            }
+            poiCellStyle.setFont(poiFont);
+        }
+        return poiCellStyle;
+    }
+
+    private static void setCellValue(HSSFCell cell, Object value, String pattern, Field field, HSSFRow row) {
+        String textValue = null;
+        if (value instanceof Integer) {
+            int intValue = (Integer) value;
+            cell.setCellValue(intValue);
+        } else if (value instanceof Float) {
+            float fValue = (Float) value;
+            cell.setCellValue(fValue);
+        } else if (value instanceof Double) {
+            double dValue = (Double) value;
+            cell.setCellValue(dValue);
+        } else if (value instanceof Long) {
+            long longValue = (Long) value;
+            cell.setCellValue(longValue);
+        } else if (value instanceof Boolean) {
+            boolean bValue = (Boolean) value;
+            cell.setCellValue(bValue);
+        } else if (value instanceof Date) {
+            Date date = (Date) value;
+            SimpleDateFormat sdf = new SimpleDateFormat(pattern);
+            textValue = sdf.format(date);
+        }
+        //TODO 暂不支持数组导出
+        /*else if (value instanceof String[]) {
+            String[] strArr = (String[]) value;
+            for (int j = 0; j < strArr.length; j++) {
+                String str = strArr[j];
+                cell.setCellValue(str);
+                if (j != strArr.length - 1) {
+                    cellNum++;
+                    cell = row.createCell(cellNum);
+                }
+            }
+        } else if (value instanceof Double[]) {
+            Double[] douArr = (Double[]) value;
+            for (int j = 0; j < douArr.length; j++) {
+                Double val = douArr[j];
+                // 值不为空则set Value
+                if (val != null) {
+                    cell.setCellValue(val);
+                }
+
+                if (j != douArr.length - 1) {
+                    cellNum++;
+                    cell = row.createCell(cellNum);
+                }
+            }
+        }*/
+        else {
+            // 其它数据类型都当作字符串简单处理
+            String defaultStr = StringUtils.EMPTY;
+            if (field != null) {
+                ExcelCell anno = field.getAnnotation(ExcelCell.class);
+                if (anno != null) {
+                    defaultStr = anno.defaultValue();
+                }
+            }
+            textValue = value == null ? defaultStr : value.toString();
+        }
+        if (textValue != null) {
+            HSSFRichTextString richString = new HSSFRichTextString(textValue);
+            cell.setCellValue(richString);
+        }
+    }
+
 }

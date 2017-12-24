@@ -35,7 +35,7 @@ public class TestImportExcel {
         //国际化策略为EXCEL_I18N_STRATEGY_NONE时表头必填
         Map<String, List<String>> importHeaderMap = new HashMap<>();
 
-        Collection<Payroll4ExcelVo> excelDatas = ExcelUtil.importExcel(Payroll4ExcelVo.class, null, inputStream, "yyyy-MM-dd", logs);
+        Collection<Payroll4ExcelVo> excelDatas = ExcelUtil.importExcel(Payroll4ExcelVo.class, null, inputStream, logs);
 
         if (logs.hasExcelLogs()) {
             System.out.println("Excel 基本日志：");
@@ -67,7 +67,7 @@ public class TestImportExcel {
         InputStream inputStream = new FileInputStream(f);
         ExcelLogs logs = new ExcelLogs();
 
-        Collection<Map> excelDatas = ExcelUtil.importExcel(Map.class, null, inputStream, "yyyy-MM-dd", logs);
+        Collection<Map> excelDatas = ExcelUtil.importExcel(Map.class, null, inputStream, logs);
 
         if (logs.hasExcelLogs()) {
             System.out.println("Excel 基本日志：");
@@ -94,11 +94,11 @@ public class TestImportExcel {
 
     @Test
     public void importXlsx() throws FileNotFoundException {
-        File f = new File("src/test/resources/test.xlsx");
+        File f = new File("testImportExcel.xlsx");
         InputStream inputStream = new FileInputStream(f);
 
         ExcelLogs logs = new ExcelLogs();
-        Collection<Map> importExcel = ExcelUtil.importExcel(Map.class, null, inputStream, "yyyy/MM/dd HH:mm:ss", logs);
+        Collection<Map> importExcel = ExcelUtil.importExcel(Map.class, null, inputStream, logs);
 
         for (Map m : importExcel) {
             System.out.println(m);

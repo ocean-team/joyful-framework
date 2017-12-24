@@ -20,30 +20,30 @@ public class Payroll4ExcelVo extends AbstractFlexbleFieldExcel {
     public static final String EXCEL_TEST_TESTTIME = "excel_test_testTime";
 
 
-    @ExcelCell(exportIndex = 0, importHeaderKey = EXCEL_TEST_NAME, defaultHeaderName = "姓名")
+    @ExcelCell(exportIndex = 0, headerKey = EXCEL_TEST_NAME, defaultHeaderName = "姓名")
     @ExcelCell.Valid(allowNull = false)
     private String name;
 
-    @ExcelCell(exportIndex = 1, importHeaderKey = EXCEL_TEST_YEAR, defaultHeaderName = "年")
+    @ExcelCell(exportIndex = 1, headerKey = EXCEL_TEST_YEAR, defaultHeaderName = "年")
     @ExcelCell.Valid(allowNull = false)
     private Long year;
 
 
-    @ExcelCell(exportIndex = 2, importHeaderKey = EXCEL_TEST_MONTH, defaultHeaderName = "月")
+    @ExcelCell(exportIndex = 2, headerKey = EXCEL_TEST_MONTH, defaultHeaderName = "月")
     @ExcelCell.Valid(allowNull = false, ge = 0, le = 12)
     private Integer month;
 
-    @ExcelCell(exportIndex = 3, importHeaderKey = EXCEL_TEST_SALARY)
+    @ExcelCell(exportIndex = 3, headerKey = EXCEL_TEST_SALARY)
     @ExcelCell.Valid(ge = 0L)
     private Double salary;
 
-    @ExcelCell(exportIndex = 4, importHeaderKey = EXCEL_TEST_TAX)
+    @ExcelCell(exportIndex = 4, headerKey = EXCEL_TEST_TAX)
     private Double tax;
 
-    @ExcelCell(exportIndex = 5, importHeaderKey = EXCEL_TEST_PAYTIME)
+    @ExcelCell(exportIndex = 5, headerKey = EXCEL_TEST_PAYTIME)
     private Date payTime;
 
-    @ExcelCell(exportIndex = 6, importHeaderKey = EXCEL_TEST_TESTTIME)
+    @ExcelCell(exportIndex = 6, headerKey = EXCEL_TEST_TESTTIME)
     private Date testTime;
 
 

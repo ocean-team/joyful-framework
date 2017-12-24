@@ -9,7 +9,7 @@ import java.util.Map;
 public class ExcelDefaultConfig {
 
     //日期类型默认输出格式
-    public static final String DEFAULT_OUTPUT_DATE_PATTERN = "yyyy-MM-dd";
+    public static final String DEFAULT_OUTPUT_DATE_PATTERN = "yyyy-MM-dd HH:mm:ss";
 
     //注解的排序字段
     public static final String SORT_ANNO_PROPS = "index";
